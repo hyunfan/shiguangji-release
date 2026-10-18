@@ -88,7 +88,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_default_bind_failure_falls_back_and_opens_actual_port(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             health = {'app': 'x-wayback-library', 'data_dir': str(root / 'collections')}
             with patch.object(launcher, 'ROOT', root), \
                  patch.object(launcher, 'start_background', side_effect=[launcher.BackgroundExitError('child exited'), health]) as start, \
@@ -102,7 +102,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_repeated_default_launch_reuses_recorded_port_without_another_fallback(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             launcher.remember_port(root, 8766)
             with patch.object(launcher, 'ROOT', root), \
                  patch.object(launcher, 'start_background', return_value={'app': 'x-wayback-library', 'data_dir': str(root / 'collections')}) as start, \

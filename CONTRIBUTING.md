@@ -29,6 +29,18 @@ python build_portable.py
 
 便携构建只从固定来源取得 Python，并核对 `python-runtime.json` 中的摘要。完整保留第三方许可及来源记录。发布包使用 `release_files.json` 白名单，不包含数据库、账号资料、运行记录或测试数据。
 
+提交前还需执行发布检查。需要 Git；新增文件应先 `git add`，检查只复制 Git 已跟踪文件的当前内容，不复制 `.git` 或未跟踪的本地资料：
+
+```powershell
+python -X utf8 check_publication.py
+# 在 Windows 上增加便携构建、临时环境启动与崩溃恢复检查：
+python -X utf8 check_publication.py --portable --smoke
+```
+
+源码和包均需通过隐私扫描；包内文件还会与源码白名单和固定 Python 运行时逐项核对摘要。离线构建可传 `--runtime-zip <官方运行时ZIP>`。本地可额外传 `--private-terms-file <本地JSON列表>` 检查个人关键词，但禁止提交该文件或审计输出。失败报告只列检查类型及文件位置；需深入排查时在本地单独运行相应构建或验证脚本。
+
+GitHub Actions 在推送 `main`、`maintenance/**` 分支和提交 PR 时运行 Python 3.10 / 3.14 与 Node.js 24 的现有测试；测试通过后，再构建、扫描源码包和便携包，并执行 Windows 临时环境验证。工作流没有仓库写权限，不发布 Release、不操作真实资料库。未配置分支保护时，检查失败不会自动禁止合并，维护者仍须确认检查结果。
+
 使用 `verify_portable.py` 检查包内运行时和本地服务，再参考 `ARCHITECTURE.md` 部署。不要在真实任务运行时替换程序；只读确认服务归属、备份旧代码，升级后核对数据和队列。
 
 公开前对干净源码导出和构建 ZIP 运行 `audit_publication.py`，并按 `SECURITY.md` 另查远程历史与附件。扫描仅报告位置和类型，不保证自动识别所有隐私；不要把个人关键词列表或本地审计报告提交进仓库。

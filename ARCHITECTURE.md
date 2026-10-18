@@ -12,6 +12,7 @@
 | `task_history.py` / `static/history.js` | 独立 SQLite 任务历史、旧数据补录、筛选分页与单条重试界面 |
 | `task_status.py` / `task_compat.py` | 当前结果展示；旧状态记录兼容推断 |
 | `platform_accounts.py` / `platform_registry.py` | 输入校验、平台行为、账号信息；保留现有合集键 |
+| `windows_integration.py` / `windows_shortcuts.py` | 桌面入口与归属核对；通过 Windows Unicode Shell Link 接口创建、加载和读回快捷方式，不执行其目标 |
 | `archive.py` / `instagram_archive.py` | X / Instagram 采集编排；平台内容归属规则保持独立 |
 | `archive_http.py` / `source_http.py` | Wayback / 公开来源的请求、跳转校验、超时、预算与取消 |
 | `archive_support.py` / `core_errors.py` | 无采集器依赖的公共函数、错误类型和错误分类 |
@@ -72,6 +73,10 @@ python build_release.py
 ```
 
 Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `tests/frontend/`。旧 `test_*.py` 的测试名称保持不变。诊断脚本保留在 `diagnostics/`，不进入发布包。
+
+`check_publication.py` 将 Git 已跟踪的当前文件复制到临时源码目录，拒绝私有数据路径、链接和越界路径，再扫描源码并构建白名单发布包。验证同时比较包内清单、实际字节和导出源码；便携包额外与固定官方运行时核对。配置文件（含 YAML、TOML、INI 和 `.env.example`）也参加隐私扫描；测试凭据仅豁免指定文件中两条完整虚构网址的摘要。检查规则不能证明没有其他隐私，远程历史及附件仍须单独审查。
+
+`.github/workflows/checks.yml` 使用只读仓库权限和固定提交摘要的 GitHub Actions。Windows 上分别运行 Python 3.10 / 3.14 及前端测试，通过后运行 `check_publication.py --portable --smoke`。工作流只使用合成数据、临时目录和固定官方 Python 下载，不读取真实合集，也不自动发布或升级安装目录。该检查入口、工作流和问题模板属于源码维护工具，不进入程序发布白名单。
 
 `app_version.py` 是应用版本的唯一来源。`release_files.json` 明确列出发布文件；构建包含 `release.json` 的逐文件摘要，排除合集、运行状态、日志、测试与诊断数据。
 

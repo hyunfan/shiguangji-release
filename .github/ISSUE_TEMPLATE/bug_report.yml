@@ -1,0 +1,51 @@
+name: 故障反馈
+description: 启动、归档、浏览、备份或迁移中的可复现问题
+title: '[故障] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这里是公开讨论区。请勿提交真实博主资料、媒体链接、数据库、完整运行日志、Cookie、令牌、代理密码或带个人用户名的本地路径。
+        安全漏洞请先阅读 [SECURITY.md](https://github.com/hyunfan/shiguangji-release/blob/main/SECURITY.md)，不要在公开问题中附上可利用细节或敏感数据。
+  - type: input
+    id: version
+    attributes:
+      label: 工具版本和安装方式
+      placeholder: '例如：1.28.1，Windows x64 便携包'
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 系统和浏览器
+      placeholder: '例如：Windows 11 x64，Edge；源码版请补充 Python 版本'
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最少复现步骤
+      description: 使用虚构用户名和路径；若必须依赖真实内容，请先描述问题类型，不要公开链接或数据。
+      placeholder: '1. 启动工具；2. 打开某项设置；3. 点击……'
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期结果和实际结果
+      description: 说明卡在哪一步、是否可重复，以及其他功能是否正常。
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: 已去除隐私的错误摘要（可选）
+      description: 仅粘贴必要的错误类型或错误码。不要上传原始日志、合集或未经检查的截图。
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已检查正文及附件，移除了个人资料、真实归档内容和凭据。
+          required: true

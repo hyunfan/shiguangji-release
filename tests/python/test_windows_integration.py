@@ -1,9 +1,7 @@
 """Launcher boundaries and shortcut round-trip; never register real user settings."""
 from contextlib import nullcontext
-import json
 import os
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -27,7 +25,7 @@ class DesktopEntryTests(unittest.TestCase):
 
     def test_success_uses_saved_port_and_checks_same_installation_before_browser(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             with patch.object(launcher, 'start_automatic', return_value=8766) as start, \
                  patch.object(launcher, 'ping', return_value={'data_dir': str(root/'collections')}), \
                  patch.object(entry.webbrowser, 'open', return_value=True) as browser:
@@ -62,7 +60,7 @@ class DesktopEntryTests(unittest.TestCase):
              patch.object(launcher, 'active_port', return_value=8766), \
              patch.object(launcher, 'stop_background', return_value=True) as stop, \
              patch.object(entry.webbrowser, 'open') as browser:
-            root = Path(folder)
+            root = Path(folder).resolve()
             self.assertEqual(entry.desktop_main(['--stop'], root), 0)
             lock.assert_called_once_with(root, 'auto')
             stop.assert_called_once_with(root, 8766)
@@ -91,13 +89,26 @@ class DesktopEntryTests(unittest.TestCase):
                 self.assertTrue(entry._matching_shortcut(actual, values), actual)
                 self.assertTrue(entry._matching_shortcut(entry._shortcut('read', path), values))
 
-    def test_powershell_receives_paths_as_data_not_script(self):
-        values = {'target': 'C:\\test path\\pythonw.exe', 'arguments': 'x "$(whoami)"', 'cwd': 'x', 'description': 'x'}
-        with patch.object(entry.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps(values), '')) as run:
-            self.assertEqual(entry._shortcut('save', Path('folder with spaces/link.lnk'), values), values)
-            command = run.call_args.args[0]
-            self.assertNotIn('$(whoami)', command[-1])
-            self.assertEqual(json.loads(run.call_args.kwargs['input'])['values'], values)
+    @unittest.skipUnless(os.name == 'nt', 'Windows shell link interface required')
+    def test_shortcut_metacharacters_and_unicode_are_literal_data(self):
+        with tempfile.TemporaryDirectory(prefix='快捷方式 数据 ') as folder:
+            root = Path(folder).resolve()
+            values = entry._shortcut_values(root)
+            values.update(arguments='x "$(whoami)" 中文 & echo example', description='中文说明')
+            path = root / '启动.lnk'
+            with patch.object(entry.subprocess, 'run', side_effect=AssertionError('No shell process may run')):
+                actual = entry._shortcut('save', path, values)
+                self.assertTrue(entry._matching_shortcut(actual, values), actual)
+                self.assertEqual(entry._shortcut('read', path)['arguments'], values['arguments'])
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows shell link interface required')
+    def test_reading_missing_shortcut_does_not_create_a_file(self):
+        with tempfile.TemporaryDirectory(prefix='快捷方式 只读 ') as folder:
+            path = Path(folder) / '不存在.lnk'
+            with self.assertRaises(OSError):
+                entry._shortcut('read', path)
+            self.assertFalse(path.exists())
+            self.assertEqual(list(Path(folder).iterdir()), [])
 
     @unittest.skipUnless(os.name == 'nt', 'Windows paths required')
     def test_install_is_idempotent_and_only_changes_desktop_entries(self):
