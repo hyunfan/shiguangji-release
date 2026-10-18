@@ -71,6 +71,7 @@
   "task_service.py",
   "task_status.py",
   "windows_integration.py",
+  "windows_shortcuts.py",
   "停止后台.cmd",
   "创建桌面快捷方式.cmd",
   "启动工具.cmd",

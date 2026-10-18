@@ -12,6 +12,7 @@
 | `task_history.py` / `static/history.js` | 独立 SQLite 任务历史、旧数据补录、筛选分页与单条重试界面 |
 | `task_status.py` / `task_compat.py` | 当前结果展示；旧状态记录兼容推断 |
 | `platform_accounts.py` / `platform_registry.py` | 输入校验、平台行为、账号信息；保留现有合集键 |
+| `windows_integration.py` / `windows_shortcuts.py` | 桌面入口与归属核对；通过 Windows Unicode Shell Link 接口创建、加载和读回快捷方式，不执行其目标 |
 | `archive.py` / `instagram_archive.py` | X / Instagram 采集编排；平台内容归属规则保持独立 |
 | `archive_http.py` / `source_http.py` | Wayback / 公开来源的请求、跳转校验、超时、预算与取消 |
 | `archive_support.py` / `core_errors.py` | 无采集器依赖的公共函数、错误类型和错误分类 |

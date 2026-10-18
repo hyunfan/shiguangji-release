@@ -32,6 +32,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+      - name: Native Windows entry-point smoke
+        run: python -X utf8 -m unittest discover -s tests/python -p test_windows_integration.py -v
       - name: Python and frontend regression tests
         run: python -X utf8 run_tests.py
 

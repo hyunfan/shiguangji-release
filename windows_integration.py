@@ -113,47 +113,9 @@ def special_folder(name):
     return Path(buffer.value)
 
 
-_SHORTCUT_SCRIPT = r'''
-$ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
-$shell = New-Object -ComObject WScript.Shell
-if ($payload.operation -eq 'save') {
-    $link = $shell.CreateShortcut([string]$payload.path)
-    $link.TargetPath = [string]$payload.values.target
-    $link.Arguments = [string]$payload.values.arguments
-    $link.WorkingDirectory = [string]$payload.values.cwd
-    $link.Description = [string]$payload.values.description
-    $link.WindowStyle = 7
-    $link.Save()
-}
-if (-not (Test-Path -LiteralPath ([string]$payload.path) -PathType Leaf)) {
-    throw 'Shortcut file was not created.'
-}
-$saved = $shell.CreateShortcut([string]$payload.path)
-@{target=$saved.TargetPath; arguments=$saved.Arguments; cwd=$saved.WorkingDirectory;
-  description=$saved.Description} | ConvertTo-Json -Compress
-'''
-
-
 def _shortcut(operation, path, values=None):
-    # All variable data travels as JSON over stdin, never as PowerShell source.
-    # ASCII JSON escapes survive Windows PowerShell's cached legacy stdin decoder
-    # on non-Chinese systems; ConvertFrom-Json restores the original Unicode.
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", _SHORTCUT_SCRIPT],
-                            input=json.dumps({"operation": operation, "path": str(path), "values": values}, ensure_ascii=True),
-                            capture_output=True, encoding="utf-8", errors="replace", timeout=25,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    if result.returncode:
-        raise RuntimeError("创建或检查快捷方式失败：" + (result.stderr.strip() or result.stdout.strip()))
-    try:
-        result = json.loads(result.stdout.lstrip("\ufeff"))
-        if not isinstance(result, dict):
-            raise ValueError("not an object")
-        return result
-    except ValueError as error:
-        raise RuntimeError("无法确认 Windows 快捷方式是否正确保存。") from error
+    from windows_shortcuts import shortcut
+    return shortcut(operation, path, values)
 
 
 def _shortcut_values(root, stop=False):
