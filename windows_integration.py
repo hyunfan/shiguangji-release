@@ -139,8 +139,10 @@ $saved = $shell.CreateShortcut([string]$payload.path)
 
 def _shortcut(operation, path, values=None):
     # All variable data travels as JSON over stdin, never as PowerShell source.
+    # ASCII JSON escapes survive Windows PowerShell's cached legacy stdin decoder
+    # on non-Chinese systems; ConvertFrom-Json restores the original Unicode.
     result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", _SHORTCUT_SCRIPT],
-                            input=json.dumps({"operation": operation, "path": str(path), "values": values}, ensure_ascii=False),
+                            input=json.dumps({"operation": operation, "path": str(path), "values": values}, ensure_ascii=True),
                             capture_output=True, encoding="utf-8", errors="replace", timeout=25,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if result.returncode:

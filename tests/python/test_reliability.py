@@ -221,7 +221,7 @@ class ReliabilityTests(unittest.TestCase):
 
 class SupervisorTests(unittest.TestCase):
     def setUp(self):
-        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);self.root=Path(temp.name)
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);self.root=Path(temp.name).resolve()
         self.session='a'*32;self.pid=1234;self.port=9876
         launcher.write_state(self.root,self.port,dict(root=str(self.root),port=self.port,session=self.session,pid=self.pid,state='ready'))
 

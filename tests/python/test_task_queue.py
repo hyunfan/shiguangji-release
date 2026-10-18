@@ -85,7 +85,7 @@ class QueueStorageTests(unittest.TestCase):
 
 class QueueIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(); self.base=Path(self.temp.name)
+        self.temp=tempfile.TemporaryDirectory(); self.base=Path(self.temp.name).resolve()/'collections';self.base.mkdir()
         from storage_policy import save_settings
         save_settings(self.base,{'zip_on_demand':False})  # Existing ZIP-before-next tests cover this optional mode.
         self.patches=[patch.object(app.TASKS, 'base',self.base),patch.object(app.TASKS, 'queue',None),
@@ -112,7 +112,9 @@ class QueueIntegrationTests(unittest.TestCase):
         self.temp.cleanup()
 
     def wait(self,predicate):
-        deadline=time.monotonic()+8
+        # Shared Windows runners can spend several seconds flushing synthetic
+        # ZIPs/backups. Keep the exact completion/ordering assertions and a bound.
+        deadline=time.monotonic()+30
         while time.monotonic()<deadline:
             with app.TASKS.lock:
                 if predicate():return
