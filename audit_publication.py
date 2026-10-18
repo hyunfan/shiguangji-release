@@ -10,7 +10,8 @@ from pathlib import Path, PurePosixPath
 import re
 import zipfile
 
-TEXT = {'.py', '.pyw', '.cmd', '.js', '.html', '.css', '.md', '.txt', '.json'}
+TEXT = {'.py', '.pyw', '.cmd', '.bat', '.ps1', '.sh', '.js', '.html', '.css',
+        '.md', '.txt', '.json', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf'}
 BLOCKED = {'collections', 'collections-backups', 'runtime', 'diagnostics', '.git',
            '.venv', 'venv', 'node_modules', '__pycache__', '.media-cache', 'tools'}
 PRIVATE_FILES = {'.cloud-backup.json', '.reliability-settings.json', '.storage-settings.json',
@@ -23,6 +24,18 @@ RULES = {
     'credential_url': r'https?://[^\s/@:]+:[^\s/@]+@',
 }
 SAMPLE_USERS = {'sample', 'example', 'public', 'default', 'test', '<user>', '<username>'}
+# Only these two complete, invented URLs exercise credential rejection/redaction.
+# Match the exact file AND whole-URL digest, never an entire test directory. Hashes
+# keep credential-shaped strings out of the scanner's own source code.
+SYNTHETIC_CREDENTIAL_URLS = {
+    'tests/python/test_source_http.py': {
+        'ad351da759f68893891de845dad6eba2f946d04f6460c82079be329ed4ab14e6',
+    },
+    'tests/python/test_task_history.py': {
+        '1475b091ebe02f890b6be71876ed4d536f2cafec801a3fdab34082f89d285fc6',
+    },
+}
+URL = r'''https?://[^\s'"<>]+'''
 
 
 def findings(name, data, private_terms=()):
@@ -39,7 +52,7 @@ def findings(name, data, private_terms=()):
         result.append({'file': name, 'kind': 'private_or_generated_path', 'line': 0})
     # Official embedded Python is checked against its pinned upstream hash by
     # build_portable; its binary data, licenses and standard library are not ours.
-    if name.startswith('python/') or p.suffix.lower() not in TEXT and p.name not in {'.gitignore', '.gitattributes', 'LICENSE'}:
+    if name.startswith('python/') or p.suffix.lower() not in TEXT and p.name not in {'.gitignore', '.gitattributes', '.env.example', 'LICENSE'}:
         return result
     if len(data) > 4 * 1024**2:
         return result + [{'file': name, 'kind': 'unexpected_large_text', 'line': 0}]
@@ -53,14 +66,16 @@ def findings(name, data, private_terms=()):
 
     for kind, pattern in RULES.items():
         for match in re.finditer(pattern, text):
-            # Synthetic proxy credentials exercise URL redaction/validation.
-            if kind == 'credential_url' and name.startswith('tests/'):
-                continue
+            if kind == 'credential_url':
+                url = re.match(URL, text[match.start():])
+                digest = hashlib.sha256(url.group().encode('utf-8')).hexdigest() if url else ''
+                if digest in SYNTHETIC_CREDENTIAL_URLS.get(name, ()):
+                    continue
             add(kind, match)
     for match in re.finditer(r'(?i)(?<![A-Za-z0-9_/:])(?:[a-z]:[/\\]+Users[/\\]+|/(?:Users|home)/)([^/\\\s\'"`]+)', text):
         if match.group(1).casefold() not in SAMPLE_USERS:
             add('personal_home_path', match)
-    urls = [(m.start(), m.end()) for m in re.finditer(r'https?://[^\s\'"<>]+', text)]
+    urls = [(m.start(), m.end()) for m in re.finditer(URL, text)]
     for match in re.finditer(r'(?<![\\\w.+-])[\w.+-]+@([\w.-]+\.[A-Za-z]{2,})(?![\w.-])', text):
         if any(start <= match.start() < end for start, end in urls):
             continue

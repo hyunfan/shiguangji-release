@@ -73,6 +73,10 @@ python build_release.py
 
 Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `tests/frontend/`。旧 `test_*.py` 的测试名称保持不变。诊断脚本保留在 `diagnostics/`，不进入发布包。
 
+`check_publication.py` 将 Git 已跟踪的当前文件复制到临时源码目录，拒绝私有数据路径、链接和越界路径，再扫描源码并构建白名单发布包。验证同时比较包内清单、实际字节和导出源码；便携包额外与固定官方运行时核对。配置文件（含 YAML、TOML、INI 和 `.env.example`）也参加隐私扫描；测试凭据仅豁免指定文件中两条完整虚构网址的摘要。检查规则不能证明没有其他隐私，远程历史及附件仍须单独审查。
+
+`.github/workflows/checks.yml` 使用只读仓库权限和固定提交摘要的 GitHub Actions。Windows 上分别运行 Python 3.10 / 3.14 及前端测试，通过后运行 `check_publication.py --portable --smoke`。工作流只使用合成数据、临时目录和固定官方 Python 下载，不读取真实合集，也不自动发布或升级安装目录。该检查入口、工作流和问题模板属于源码维护工具，不进入程序发布白名单。
+
 `app_version.py` 是应用版本的唯一来源。`release_files.json` 明确列出发布文件；构建包含 `release.json` 的逐文件摘要，排除合集、运行状态、日志、测试与诊断数据。
 
 Windows x64 便携包使用 `python build_portable.py` 构建；首次下载 `python-runtime.json` 固定的官方嵌入式 ZIP，核对 SHA256 后缓存到 `diagnostics/runtime-cache`。离线构建可传 `--runtime-zip 路径`。构建保留所有官方组件及许可，仅将 `python314._pth` 改为标准库、运行环境目录和应用根目录，不加载系统 PYTHONPATH、用户包或 site。运行文件放在 `python/`，与可写日志 `runtime/` 分开。根目录 `portable.json` 是来源记录和完整解压标志；缺失运行环境时启动脚本明确失败。便携包另命名为 `shiguangji-版本-windows-x64-portable.zip`，不会替换源码发布包。

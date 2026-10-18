@@ -1,0 +1,21 @@
+name: 功能建议
+description: 描述使用场景、遇到的困难和希望得到的结果
+title: '[建议] '
+body:
+  - type: markdown
+    attributes:
+      value: '请使用虚构示例，不要提交个人账号资料、真实归档数据、凭据或媒体链接。'
+  - type: textarea
+    id: problem
+    attributes:
+      label: 什么场景下遇到了什么困难？
+      description: 说明当前操作步骤，以及最影响使用的地方。
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 希望得到什么结果？
+      description: 可以描述理想流程、替代方案或兼容性要求。
+    validations:
+      required: true
