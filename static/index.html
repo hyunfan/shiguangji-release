@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>时光集 · X / Instagram 存档整理</title><link rel="stylesheet" href="/static/style.css"><script src="/static/gallery.js" defer></script><script src="/static/history.js" defer></script><script src="/static/storage.js" defer></script><script src="/static/app.js" defer></script></head>
+<body>
+<header class="topbar"><a class="brand" href="/">时光集<span>WAYBACK LIBRARY</span></a><span class="local-label">本地媒体库</span></header>
+<section id="connection-panel" class="connection-panel" hidden aria-live="polite" aria-labelledby="connection-title">
+  <strong id="connection-title">暂时无法连接本机工具</strong>
+  <p id="connection-help" class="hint"></p>
+  <div class="actions"><a id="launch-tool" class="primary" href="x-wayback-library://open" hidden>启动时光集</a><button id="reconnect-tool" class="secondary" type="button">重新连接</button></div>
+</section>
+<div class="workspace">
+  <aside class="sidebar">
+    <details id="add-account" class="add-account" open><summary>＋ 添加博主</summary>
+    <label for="platform">归档平台</label><select id="platform"><option value="x">X / Twitter</option><option value="instagram" disabled>Instagram（连接新版后台后可用）</option></select>
+    <form id="collect-form">
+      <label for="username" id="username-label">X / Twitter 用户名</label>
+      <input id="username" name="username" autocomplete="off" placeholder="@username 或主页链接" required>
+      <p class="hint" id="platform-hint">填写 @ 后的用户名。自动搜寻并核对旧用户名，再查找帖子与媒体；核实的旧名会一起整理。</p>
+      <details id="instagram-seeds" class="manual-entry-options" hidden><summary>可选：补充 Instagram 帖子链接</summary><label for="instagram-links">已知帖子 / Reels 链接</label><textarea id="instagram-links" rows="3" maxlength="6000" placeholder="https://www.instagram.com/p/帖子代码/"></textarea><p class="hint">每行一个，最多 20 个。用于单账号归档；核对快照中的作者后才收录。批量队列不使用此框。</p></details>
+      <button class="primary wide" id="start-button" type="submit">开始查找与下载</button>
+      <details class="manual-entry-options"><summary>只想查帖子？</summary><button class="secondary wide" id="discover-input-button" type="button" hidden disabled>仅查找帖子</button><p class="hint" id="discover-input-note" hidden>只读取帖子和正文，本次不下载媒体。</p></details>
+    </form>
+    <details id="batch-add" class="manual-entry-options" hidden><summary>批量添加，逐个归档</summary>
+      <form id="queue-form"><label for="queue-input" id="queue-input-label">多个 X / Twitter 用户名</label><textarea id="queue-input" rows="5" maxlength="32768" placeholder="@alice&#10;@bob&#10;https://x.com/charlie"></textarea>
+      <p class="hint">每行一个，也可用空格或逗号分隔。最多 100 个，同平台重复 ID 自动去重。可分别选择平台加入同一队列。</p>
+      <button id="queue-add" class="primary wide" type="submit">加入队列</button><p class="hint">按当前高级设置逐个归档，账号内自动接着处理。空闲时自动开始；暂停中的队列仅追加，需点击继续。</p></form>
+      <p id="queue-message" class="hint" role="status" hidden></p>
+    </details>
+    </details>
+    <p id="form-error" class="error" role="alert" hidden></p>
+    <div class="divider"></div>
+    <div class="eyebrow library-heading">我的合集 <button id="refresh-library" class="text-button" type="button">刷新</button></div>
+    <button id="history-open" type="button" class="secondary wide" hidden>查找博主与历史任务</button>
+    <nav id="library" aria-label="已保存的合集"><p class="hint">整理后的合集会保存在这里。</p></nav>
+    <details id="advanced-settings" class="options advanced-settings"><summary>高级设置</summary>
+      <p class="hint">默认设置会自动接着处理。这里的更改在下一次开始任务时生效。</p>
+      <label class="check-option"><input id="auto-continue" type="checkbox" checked>自动继续，直到本轮结束</label>
+      <p class="hint">本轮检查完成或连续 3 批没有新增文件、帖子或解析进展时结束。取消勾选则只运行一批。</p>
+      <label for="max-minutes">每批检索时长</label><select id="max-minutes"><option value="5">5 分钟</option><option value="10" selected>10 分钟</option><option value="30">30 分钟</option></select>
+      <p class="hint">每批最多 200 次请求，到限后保存进度；开启自动继续时无需逐批点击。</p>
+        <label for="auto-max-minutes">自动运行上限</label><select id="auto-max-minutes"><option value="0" selected>直到本轮结束或连续无进展</option><option value="120">最多 2 小时</option><option value="360">最多 6 小时</option></select>
+        <label for="proxy">HTTP 代理（可选）</label><input id="proxy" placeholder="http://127.0.0.1:7890">
+        <p class="hint">留空使用系统 / 环境代理。浏览器能打开 Wayback，但工具超时时可填写。</p>
+        <label for="max-pages">本轮快照上限</label><input id="max-pages" type="number" min="0" max="1000000" value="0"><p class="hint">0 为全部；可先填 100 小批试跑。</p>
+        <label for="max-media-mb">单个媒体上限（MB）</label><input id="max-media-mb" type="number" min="0" max="100000" value="512"><p class="hint">0 为不限大小。</p>
+        <label class="check-option"><input id="force-recheck" type="checkbox">重新检查暂无存档项</label><p class="hint">默认复用 24 小时内的空索引结果。勾选后立即复查，可能耗时较长；网络失败项始终会重试。</p>
+      <p class="hint">以下多个公开来源设置用于 X；Instagram 当前使用 Wayback 历史快照及媒体存档，不查询 X 镜像。Instagram 暂不自动关联旧用户名，可按旧名另建合集。</p><label class="check-option"><input id="multi-source" type="checkbox" checked>使用多个公开来源查找媒体</label>
+      <p class="hint">包括原始媒体链接、备用存档和公开帖子线索。关闭后只使用常规存档恢复。</p>
+      <details class="options source-options"><summary>选择来源</summary>
+        <label class="check-option"><input id="common-crawl" type="checkbox" checked>查询 Common Crawl 存档</label>
+        <label for="cc-indexes">本轮查询的存档集合数</label><input id="cc-indexes" type="number" min="1" max="12" value="6"><p class="hint">每项本轮最多查询 1–12 个相关集合，保留查询进度。后续任务继续未完成的集合；未找到不代表所有历史集合都没有。</p>
+        <label class="check-option"><input id="public-mirrors" type="checkbox" checked>查询公开帖子和账号资料镜像</label>
+        <p class="hint">启用后会向 FxTwitter 公开镜像发送用户名、数字账号 ID 和帖子 ID，查找改名与媒体线索；也会查询 VxTwitter 帖子镜像。可关闭此项；无需登录或提供 Cookie。找到地址后仍须下载并校验文件。</p>
+      </details>
+    </details>
+    <div class="archive-note">关闭网页，任务仍会继续。任务运行时自动申请防休眠，请以任务状态中的“已启用”为准。<details><summary>离开电脑前</summary><p>请接通电源，勿合盖、手动睡眠或关机；屏幕可以熄灭。任务结束并保存打包后恢复正常睡眠。用完后双击桌面“停止时光集”保存进度并退出后台；原“停止后台”脚本也可使用。</p></details></div>
+    <details id="reliability-options" class="options" hidden><summary>运行保护与备份</summary>
+      <label class="check-option"><input id="backup-after-task" type="checkbox">每个账号任务结束后校验增量备份</label>
+      <p class="hint">备份数据库、原始页面和媒体；文件内容相同只保存一份。备份失败会暂停后续队列。默认保存在资料库旁的备份目录，同一块硬盘的备份无法防止硬盘损坏。</p>
+      <label class="check-option"><input id="resume-after-crash" type="checkbox">后台崩溃恢复后，自动继续原先运行的队列</label>
+      <p class="hint">默认关闭。仅针对异常退出的排队任务；主动暂停和正常退出后仍需手动继续。不开启 Windows 登录自启。</p>
+      <p id="guard-status" class="hint"></p>
+      <div id="cloud-backup-options" hidden>
+        <label class="check-option"><input id="cloud-backup-enabled" type="checkbox">同时备份到同步或挂载目录</label>
+        <label for="cloud-backup-path">网盘备份文件夹</label>
+        <input id="cloud-backup-path" type="text" placeholder="专用备份文件夹的绝对路径，不限盘符和名称" autocomplete="off">
+        <button id="cloud-backup-save" class="secondary" type="button">保存网盘备份设置</button>
+        <p class="hint">支持网盘同步文件夹、挂载盘、网络共享或外接盘。上级目录须已存在，最后一级请选择专用空文件夹。已有及后续的本地备份按博主打包复制，断开后会重试，不影响采集，不联动删除已有副本。</p>
+        <p id="cloud-backup-status" class="hint" role="status" aria-live="polite"></p>
+        <p class="hint">“已复制并校验”表示目标目录读回通过；实际上传是否完成，请在所用网盘客户端或服务端确认。普通本地目录不会自动上传。</p>
+      </div>
+    </details>
+    <details id="storage-options" class="options" hidden><summary>本地空间与网盘试读</summary>
+      <label class="check-option"><input id="storage-demand" type="checkbox">ZIP 仅在需要下载时生成</label>
+      <label for="storage-days">预览多久以前生成的 ZIP</label><select id="storage-days"><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select>
+      <label for="storage-versions">保留数据库备份版本数</label><select id="storage-versions"><option value="1">最新 1 份</option><option value="3">最新 3 份</option><option value="5">最新 5 份</option></select>
+      <p class="hint">版本数在下次成功备份后生效，只整理旧数据库快照；当前备份索引和媒体备份对象保留，不会据此自动删除原件。</p>
+      <label for="storage-cache">网盘试读缓存上限</label><select id="storage-cache"><option value="1">1 GiB</option><option value="5">5 GiB</option><option value="10">10 GiB</option><option value="20">20 GiB</option></select>
+      <button id="storage-save" class="secondary" type="button">保存空间设置</button>
+      <p id="storage-cache-status" class="hint"></p>
+      <div class="actions"><button id="storage-compress" class="secondary" type="button">无损压缩历史网页</button><button id="storage-compress-pause" class="secondary" type="button" disabled>暂停压缩</button><button id="storage-preview" class="secondary" type="button">预览旧 ZIP</button><button id="storage-preview-all" class="secondary" type="button">预览全部可释放 ZIP</button></div>
+      <p class="hint">新网页自动压缩。已有网页及其本地备份可一次整理，逐文件校验后替换；中断后可再次点击继续，图片与视频保持原样。</p>
+      <p class="hint">先预览、再确认释放。只有仍能用本地资料重新生成的工具 ZIP 才会列入。</p>
+      <div class="actions"><button id="storage-probe" class="secondary" type="button">试读当前博主的网盘媒体</button><button id="storage-clear" class="secondary" type="button">清理试读缓存</button></div>
+      <p class="hint">从已有恢复包各选一张图片和一个视频，完整读取并核对摘要；首次需等待文件缓存完成，单文件最多 200 MB。此试读阶段保留本地原件，暂不启用纯云内容库。</p>
+      <p id="storage-message" class="hint" role="status" aria-live="polite"></p><div id="storage-result" class="hint"></div>
+      <button id="storage-review" class="secondary" type="button" hidden>核对清单并释放 ZIP</button>
+    </details>
+    <div class="runtime-info" aria-label="当前工具与数据位置"><p id="runtime-version">版本：正在连接…</p><p class="runtime-folder-label">合集保存目录</p><p id="runtime-folder">等待后台提供目录</p></div>
+  </aside>
+  <main>
+    <section id="history-panel" class="history-panel" hidden aria-labelledby="history-title">
+      <div class="queue-heading"><h2 id="history-title">查找博主与历史任务</h2><button id="history-close" class="text-button" type="button">收起</button></div>
+      <p class="hint">按用户名、已核实旧名或数字 ID 查找。继续／重试会保留已保存的内容，沿用该次已记录的任务设置；代理使用当前高级设置。旧版缺失的设置使用当前值。</p>
+      <div class="filters history-filters"><label class="search-box"><span>搜索博主</span><input id="history-query" type="search" maxlength="100" placeholder="用户名、已核实旧名或数字 ID"></label><label><span>任务状态</span><select id="history-state"><option value="all">全部状态</option><option value="unfinished">暂停、中断或失败</option><option value="paused">已暂停</option><option value="interrupted">意外中断</option><option value="failed">失败</option><option value="finished">本轮已结束</option></select></label><label><span>平台</span><select id="history-platform"><option value="all">全部平台</option><option value="x">X / Twitter</option><option value="instagram">Instagram</option></select></label></div>
+      <p id="history-running-note" class="hint" hidden>有任务正在运行。请先等待完成或暂停保存，再继续历史任务；仍可查找和浏览合集。</p>
+      <p id="history-error" class="error" role="alert" hidden></p><p id="history-count" class="hint" role="status"></p>
+      <ol id="history-items"></ol><div class="actions"><button id="history-prev" class="secondary small" type="button">上一页</button><button id="history-next" class="secondary small" type="button">下一页</button><button id="history-refresh" class="text-button" type="button">刷新记录</button></div>
+      <p id="history-note" class="hint"></p>
+    </section>
+    <section id="queue-panel" class="queue-panel" hidden aria-label="归档队列">
+      <div class="queue-heading"><strong id="queue-title">归档队列</strong><span id="queue-counts" class="hint"></span></div>
+      <p id="queue-note" class="hint"></p>
+      <div class="actions"><button id="queue-pause" class="secondary small" type="button">暂停队列</button><button id="queue-resume" class="primary small" type="button">继续队列</button></div>
+      <details id="queue-details"><summary>查看顺序与结果</summary><ol id="queue-items"></ol><p class="hint">移除仅取消排队，保留已有合集。失败账号会保留原因并转到下一项；手动暂停或达到运行时限会暂停整个队列。重启后需点击继续队列。</p><button id="queue-clear" class="secondary small" type="button">清除已结束记录</button></details>
+    </section>
+    <section class="job-panel" id="job-panel" hidden aria-live="polite">
+      <div class="job-line"><strong id="job-title">检索存档</strong><button class="secondary small" id="pause-button">暂停并保存</button></div>
+      <p id="job-status" class="task-badge" hidden></p><p id="job-result" class="job-result" hidden></p>
+      <p id="job-aliases" class="hint" hidden></p><p id="job-ended" class="hint" hidden></p>
+      <div class="activity-track" id="activity-track"><progress id="activity" max="100" value="0" aria-label="当前步骤进度"></progress></div>
+      <p id="job-outcome" class="job-outcome"></p><p id="job-reason" class="hint" hidden></p><p id="job-live-detail" class="hint" hidden aria-live="polite"></p><p id="job-sleep" class="hint" hidden></p><details id="job-technical"><summary>查看处理详情与记录</summary><p id="job-detail" class="hint"></p><p id="job-progress" class="hint"></p><ol id="job-logs"></ol></details>
+      <div id="job-actions" class="actions" hidden><button id="job-browse" class="primary" type="button">浏览合集</button><button id="job-resume" class="secondary" type="button" hidden>继续任务</button><button id="job-rebuild" class="secondary" type="button" hidden>重新生成 ZIP</button></div>
+    </section>
+    <section id="welcome" class="welcome"><div class="archive-symbol" aria-hidden="true">◷</div><p class="eyebrow">把散落的存档，整理在一起</p><h1>一个用户名，<br>一份时光合集。</h1><p>找回历史帖子，把可恢复的图片与视频按时间排列。<br>整理完成后，下载 ZIP 即可离线浏览。</p><div class="welcome-flow"><span>输入用户名</span><b>›</b><span>整理存档</span><b>›</b><span>浏览 / 下载</span></div></section>
+    <section id="collection" hidden>
+      <div class="collection-heading"><div><p class="eyebrow" id="collection-subtitle">已保存的历史</p><h1 id="collection-title"></h1><p id="collection-status" class="task-badge" hidden></p><p id="collection-identity" class="collection-identity" hidden></p><p id="collection-alias-status" class="hint" hidden></p></div></div>
+      <div class="actions collection-actions"><button id="continue-button" class="primary" type="button" disabled>继续查找与下载</button><a id="zip-link" class="secondary">下载合集 ↓</a><details id="more-actions" class="more-actions"><summary class="secondary">更多 <span aria-hidden="true">⋯</span></summary><div class="more-actions-panel"><a id="offline-link" class="secondary" target="_blank" rel="noopener">打开离线版</a><button id="rebuild-zip" class="secondary" type="button" hidden>重新生成 ZIP</button><button id="identity-button" class="secondary" type="button" hidden>历史用户名</button><div class="menu-caption">单独处理某一步</div><button id="discover-button" class="secondary" type="button" hidden>仅查找帖子</button><button id="repair-button" class="secondary" type="button">仅下载已知媒体</button><p class="hint">通常直接使用“继续查找与下载”即可。</p><button id="delete-button" class="secondary danger" type="button" hidden>删除博主</button><p class="hint" id="delete-note" hidden>该博主正在整理，请先暂停并等待保存完成，再删除。</p></div></details></div>
+      <p class="recovery-action-note">自动查找帖子并下载可恢复的媒体，已保存的文件会保留。</p>
+      <div class="stats" id="stats"></div>
+      <div id="media-inventory" class="media-inventory" hidden></div>
+      <p id="collection-note" class="coverage-note"></p>
+      <details id="coverage-details" class="coverage-details"><summary>未恢复原因与来源说明</summary><p class="hint">“未恢复”不代表继续查找就一定能找回。存档与当前公开文件分别标注来源；每项媒体保留实际检查结果。公开镜像启用时会发送用户名与帖子 ID，可在“高级设置 → 选择来源”关闭。</p><div id="recovery-summary" class="recovery-summary" hidden></div>
+      <div id="discovery-records" class="recovery-summary" hidden aria-label="帖子查找记录"></div>
+      <details id="error-details" class="error-details" hidden><summary id="error-summary">本轮未完成项目</summary><ul id="error-list"></ul></details></details>
+      <div class="filters"><label class="search-box"><span>搜索</span><input id="search" type="search" placeholder="帖子内容或 ID"></label><label><span class="sr-only">内容类型</span><select id="type-filter"><option value="all">全部内容</option><option value="saved">仅已下载媒体</option><option value="saved-video">已下载视频</option><option value="image">含图片</option><option value="video">含视频</option><option value="text">仅文字 / 链接</option><option value="missing">有缺失媒体</option><option value="missing-text">未恢复正文</option></select></label><label><span class="sr-only">发帖月份</span><select id="month-filter"><option value="all">全部月份</option></select></label><label><span class="sr-only">时间排序</span><select id="sort"><option value="desc">从新到旧</option><option value="asc">从旧到新</option></select></label></div>
+      <div class="result-line"><span id="result-count"></span><span>时间统一为 UTC</span></div>
+      <div id="timeline"></div><button id="load-more" class="secondary wide" hidden>加载更多</button>
+    </section>
+  </main>
+</div>
+<dialog id="identity-dialog" class="identity-dialog" aria-labelledby="identity-title"><h2 id="identity-title">历史用户名</h2><p id="identity-summary" class="hint"></p><p id="identity-search-status" class="hint" aria-live="polite"></p><p class="hint">按数字账号 ID 核对名字。证据日期是资料记录时间，不代表实际改名日期。缺少证据或存在冲突的帖子不会自动归并。</p><div id="identity-list"></div><form id="identity-form"><label for="identity-input">可选：补充额外的旧名线索</label><div class="actions"><input id="identity-input" maxlength="100" placeholder="@旧用户名 或主页链接" autocomplete="off"><button id="identity-add" class="secondary" type="submit">添加待核对</button></div></form><p id="identity-message" class="hint" aria-live="polite"></p><div class="actions"><button id="identity-scan" class="primary" type="button">从本地快照查找</button><button id="identity-close" class="secondary" type="button">关闭</button></div><p class="hint">正常整理会自动搜索本地和网上的身份线索。上面的本地检查不联网，支持暂停和续查；停止检索某个名字会保留已保存内容。</p></dialog>
+<dialog id="delete-dialog" class="delete-dialog" aria-labelledby="delete-title" aria-describedby="delete-description"><h2 id="delete-title">删除博主</h2><p id="delete-description"></p><p class="hint">只删除本工具保存的这一位博主。会永久删除本地帖子、图片、视频、快照缓存、ZIP 合集及该博主的查询历史，无法撤销；不会操作 X 或 Instagram 账号，也不会删除你另外复制的文件。</p><p id="delete-error" class="error" role="alert" hidden></p><div class="actions"><button id="delete-cancel" class="secondary" type="button" autofocus>取消</button><button id="delete-confirm" class="secondary danger" type="button">确认删除</button></div></dialog>
+<dialog id="lightbox" aria-label="存档图片预览"><button id="close-lightbox" class="close-button" aria-label="关闭预览" autofocus>×</button><div id="lightbox-content"></div><div class="lightbox-toolbar"><button id="previous-image" class="secondary small" type="button" aria-label="上一张图片">← 上一张</button><span id="image-count" aria-live="polite"></span><button id="next-image" class="secondary small" type="button" aria-label="下一张图片">下一张 →</button><span id="image-download"></span></div><p id="image-caption" class="hint"></p><p class="lightbox-hint">浏览当前筛选结果中的已下载图片 · 可用键盘 ← → 切换，Esc 关闭</p></dialog>
+<dialog id="storage-dialog" aria-labelledby="storage-confirm-title"><h2 id="storage-confirm-title">释放生成的 ZIP</h2><p id="storage-confirm-description"></p><div class="actions"><button id="storage-cancel" class="secondary" type="button" autofocus>取消</button><button id="storage-confirm" class="secondary" type="button">确认释放这些 ZIP</button></div></dialog>
+</body></html>
