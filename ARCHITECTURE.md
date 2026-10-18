@@ -82,10 +82,10 @@ Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `te
 
 Windows x64 便携包使用 `python build_portable.py` 构建；首次下载 `python-runtime.json` 固定的官方嵌入式 ZIP，核对 SHA256 后缓存到 `diagnostics/runtime-cache`。离线构建可传 `--runtime-zip 路径`。构建保留所有官方组件及许可，仅将 `python314._pth` 改为标准库、运行环境目录和应用根目录，不加载系统 PYTHONPATH、用户包或 site。运行文件放在 `python/`，与可写日志 `runtime/` 分开。根目录 `portable.json` 是来源记录和完整解压标志；缺失运行环境时启动脚本明确失败。便携包另命名为 `shiguangji-版本-windows-x64-portable.zip`，不会替换源码发布包。
 
-在 Windows 上执行 `python verify_portable.py diagnostics/releases/shiguangji-1.28.1-windows-x64-portable.zip` 进行实际启动验证。脚本先核对发布文件，再解压到临时中文带空格目录，移除 PATH 中的系统 Python，并设置无效 PYTHONHOME/PYTHONPATH。检查模块、SQLite 持久化、Windows 证书库、临时快捷方式读回、真实 HTTP 页面、包内 pythonw 后台、重复启动复用与正常停止/重启。测试只用临时数据和临时快捷方式，不注册用户桌面或协议，也不采集真实账号。此验证不等于在另一台全新电脑或 Windows 10 上实测。
+在 Windows 上执行 `python verify_portable.py diagnostics/releases/shiguangji-1.28.2-windows-x64-portable.zip` 进行实际启动验证。脚本先核对发布文件，再解压到临时中文带空格目录，移除 PATH 中的系统 Python，并设置无效 PYTHONHOME/PYTHONPATH。检查模块、SQLite 持久化、Windows 证书库、临时快捷方式读回、真实 HTTP 页面、包内 pythonw 后台、重复启动复用与正常停止/重启。测试只用临时数据和临时快捷方式，不注册用户桌面或协议，也不采集真实账号。此验证不等于在另一台全新电脑或 Windows 10 上实测。
 
 ```powershell
-python deploy_release.py diagnostics/releases/shiguangji-1.28.1.zip --target "C:\实际安装目录" --backup-root diagnostics/deploy-backups --port 8766
+python deploy_release.py diagnostics/releases/shiguangji-1.28.2.zip --target "C:\实际安装目录" --backup-root diagnostics/deploy-backups --port 8766
 ```
 
 升级前检查服务归属和任务空闲；保存程序文件备份；温和停止旧后台，校验更新文件，按升级前状态恢复后台；失败时回退程序文件。不建立开机自启动，不覆盖 `collections/`。
