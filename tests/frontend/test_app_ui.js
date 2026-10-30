@@ -921,7 +921,7 @@ test('index page loads the shared core first, then panels, then the controller',
   const scripts=[...html.matchAll(/<script src="\/static\/([^"]+)" defer><\/script>/g)].map(match=>match[1]);
   assert.deepEqual(scripts.filter(name=>name.startsWith('app')),APP_SCRIPTS);
   for(const name of ['history.js','storage.js'])assert.ok(scripts.indexOf(name)<scripts.indexOf('app.js'));
-  for(const name of APP_SCRIPTS)assert.match(fs.readFileSync(__dirname+'/../../static/'+name,'utf8'),/^\/\*[^\n]*\*\/\n\(\(\) => \{\n  'use strict';/);
+  for(const name of APP_SCRIPTS)assert.match(fs.readFileSync(__dirname+'/../../static/'+name,'utf8'),/^\/\*[^\r\n]*\*\/\r?\n\(\(\) => \{\r?\n  'use strict';/);
 });
 test('native progress reports only current-step completion using CSP-compatible attributes',async()=>{
   const app=createApp();await settle();
