@@ -187,7 +187,7 @@ class Catalog:
                 return {'processed': processed, 'remaining': len(pending) - number}
             path = folder / 'raw' / name
             try:
-                from shiguangji.storage.compressed_files import logical_stat, read_text
+                from shiguangji.core.stored_text import logical_stat, read_text
                 stat = logical_stat(path)
                 prior = self.db.execute('SELECT size,mtime,version FROM checked WHERE collection=? AND name=?', (folder.name, name)).fetchone()
                 if not prior or tuple(prior) != (stat.st_size, stat.st_mtime_ns, VERSION):
