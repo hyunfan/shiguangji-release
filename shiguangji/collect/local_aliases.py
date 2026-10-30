@@ -105,10 +105,121 @@ def copy_media(c, folder, saved, post, item):
             temporary.unlink(missing_ok=True)
 
 
+def _read_source(c, db, folder, alias, anchor, downloads):
+    """Read-only view of an alias collection: its posts, parser cache and capture rows.
+
+    ``source_revision`` changes whenever the source gains posts or media or its raw
+    files change, which invalidates this account's per-snapshot import fingerprints.
+    """
+    from shiguangji.platforms.account_identity import revision
+    source_rows = db.execute('SELECT id,data FROM posts ORDER BY id').fetchall()
+    source_posts = {pid: json.loads(raw) for pid, raw in source_rows}
+    # The source collector already parsed these same bytes. Reuse
+    # its author-bearing models only while its parser fingerprint
+    # still matches the snapshot; otherwise parse the raw again.
+    source_checks = {row[0]: tuple(row[1:]) for row in db.execute(
+        'SELECT name,size,mtime_ns,parser_version FROM raw_checks')}
+    parsed_identity = db.execute("SELECT value FROM settings WHERE key='parsed_identity'").fetchone()
+    cache_context_valid = bool(parsed_identity and parsed_identity[0] == revision(c.identities.snapshot(alias)))
+    cached_posts = {}
+    for post in source_posts.values():
+        if set(post.get('author_ids', [])) != {anchor}:
+            continue
+        for capture in post.get('captures', []):
+            if isinstance(capture.get('timestamp'), str) and isinstance(capture.get('url'), str):
+                key = hashlib.sha256((capture['timestamp'] + capture['url']).encode()).hexdigest()[:24] + '.txt'
+                cached_posts.setdefault(key, []).append(post)
+    # Invalidate when the source gains media or its file bytes change.
+    media_stamps = []
+    if downloads:
+        for post in source_posts.values():
+            c.identity_check()
+            for item in post.get('media', []):
+                if item.get('status') == 'saved':
+                    try:
+                        media_stamps.append([item.get('path'), stamp(contained(folder, item.get('path', ''), 'media'))])
+                    except ValueError:
+                        media_stamps.append([item.get('path'), None])
+    source_revision = hashlib.sha256(json.dumps([source_rows, media_stamps,
+        sorted(source_checks.items()), cache_context_valid]).encode()).hexdigest()
+    rows = []
+    for ts, url, mime, digest in db.execute("SELECT timestamp,original,mimetype,digest FROM captures WHERE status='done'"):
+        name = hashlib.sha256((ts + url).encode()).hexdigest()[:24] + '.txt'
+        rows.append((name, ts, url, mime, digest))
+    rows.sort()
+    return source_posts, source_checks, cache_context_valid, cached_posts, source_revision, rows
+
+
+def _reuse_media(c, folder, alias, post, merged, source_post, available, failed_media, stats):
+    """Fill this account's proven media of ``post`` from local files; return [path, stamp] pairs."""
+    files = []
+    source_media = {m['key']: m for m in source_post.get('media', [])}
+    proven_keys = {m['key'] for m in post['media']}
+    for item in merged['media']:
+        if item['key'] not in proven_keys:
+            continue
+        if target_saved(c, item):
+            files.append([item['path'], stamp(contained(c.folder, item['path'], 'media'))])
+            continue
+        already = available.get(item['key'])
+        if already and already['kind'] == item['kind'] and target_saved(c, already):
+            urls = list(dict.fromkeys(item['urls'] + already.get('urls', [])))
+            item.update(deepcopy(already), urls=urls)
+            files.append([item['path'], stamp(contained(c.folder, item['path'], 'media'))])
+            continue
+        saved = source_media.get(item['key'], {})
+        if saved.get('status') != 'saved':
+            continue
+        failure_key = (alias, post['id'], item['key'])
+        if failure_key in failed_media:
+            continue
+        try:
+            result = copy_media(c, folder, saved, post, item)
+        except (OSError, ValueError):
+            result = None
+        if result:
+            item.update(result)
+            before_files = len(c.budget.reused_paths)
+            c.mark_saved(item, local=True)
+            stats['reused_files'] += len(c.budget.reused_paths) - before_files
+            available[item['key']] = deepcopy(item)
+            files.append([item['path'], stamp(contained(c.folder, item['path'], 'media'))])
+        else:
+            stats['skipped_media'] += 1
+            failed_media.add(failure_key)
+    return files
+
+
+def _keep_raw(c, name, raw, ts, url, mime, digest):
+    """Store the snapshot that proved imported posts, and mark its capture as read."""
+    from shiguangji.core.archive_support import PARSER_CACHE_VERSION
+    destination = contained(c.folder, 'raw/' + name, 'raw')
+    if not raw_files.exists(destination):
+        raw_files.write_bytes(destination, raw)
+    if raw_files.read_bytes(destination) == raw:
+        c.store.db.execute('INSERT OR IGNORE INTO captures VALUES(?,?,?,?,?,?)', (ts, url, mime, digest, 'done', ''))
+        c.store.db.execute("UPDATE captures SET status='done',error='' WHERE timestamp=? AND original=?", (ts, url))
+        st = raw_files.logical_stat(destination)
+        c.store.db.execute('INSERT OR REPLACE INTO raw_checks VALUES(?,?,?,?)', (name, st.st_size, st.st_mtime_ns, PARSER_CACHE_VERSION))
+
+
+def _snapshot_posts(raw, cached, url, ts, alias):
+    """Posts of one alias snapshot: the source's parsed models when still valid, else a fresh parse."""
+    if cached is None:
+        return extract(raw.decode('utf-8', errors='replace'), url, ts, alias)
+    parsed = deepcopy(cached)
+    for post in parsed:
+        for item in post['media']:
+            # Source paths are never treated as destination
+            # files. The normal copy below validates bytes.
+            if item.get('status') == 'saved':
+                item.update(status='pending', path='', bytes=0, sha256='')
+    return parsed
+
+
 def reuse_local_aliases(c, max_files=200, seconds=20):
     """Bounded, resumable import. Source libraries stay intact and remain separate."""
     from shiguangji.core.archive_support import PARSER_CACHE_VERSION
-    from shiguangji.platforms.account_identity import revision
     started = time.monotonic()
     info = c.identities.snapshot(c.handle)
     anchor = info['user_id']
@@ -146,41 +257,8 @@ def reuse_local_aliases(c, max_files=200, seconds=20):
             try:
                 with collection_lock(folder), closing(sqlite3.connect(
                         'file:' + (folder / 'archive.sqlite').as_posix() + '?mode=ro', uri=True, timeout=1)) as db:
-                    source_rows = db.execute('SELECT id,data FROM posts ORDER BY id').fetchall()
-                    source_posts = {pid: json.loads(raw) for pid, raw in source_rows}
-                    # The source collector already parsed these same bytes. Reuse
-                    # its author-bearing models only while its parser fingerprint
-                    # still matches the snapshot; otherwise parse the raw again.
-                    source_checks = {row[0]: tuple(row[1:]) for row in db.execute(
-                        'SELECT name,size,mtime_ns,parser_version FROM raw_checks')}
-                    parsed_identity = db.execute("SELECT value FROM settings WHERE key='parsed_identity'").fetchone()
-                    cache_context_valid = bool(parsed_identity and parsed_identity[0] == revision(c.identities.snapshot(alias)))
-                    cached_posts = {}
-                    for post in source_posts.values():
-                        if set(post.get('author_ids', [])) != {anchor}:
-                            continue
-                        for capture in post.get('captures', []):
-                            if isinstance(capture.get('timestamp'), str) and isinstance(capture.get('url'), str):
-                                key = hashlib.sha256((capture['timestamp'] + capture['url']).encode()).hexdigest()[:24] + '.txt'
-                                cached_posts.setdefault(key, []).append(post)
-                    # Invalidate when the source gains media or its file bytes change.
-                    media_stamps = []
-                    if downloads:
-                        for post in source_posts.values():
-                            c.identity_check()
-                            for item in post.get('media', []):
-                                if item.get('status') == 'saved':
-                                    try:
-                                        media_stamps.append([item.get('path'), stamp(contained(folder, item.get('path', ''), 'media'))])
-                                    except ValueError:
-                                        media_stamps.append([item.get('path'), None])
-                    source_revision = hashlib.sha256(json.dumps([source_rows, media_stamps,
-                        sorted(source_checks.items()), cache_context_valid]).encode()).hexdigest()
-                    rows = []
-                    for ts, url, mime, digest in db.execute("SELECT timestamp,original,mimetype,digest FROM captures WHERE status='done'"):
-                        name = hashlib.sha256((ts + url).encode()).hexdigest()[:24] + '.txt'
-                        rows.append((name, ts, url, mime, digest))
-                    rows.sort()
+                    (source_posts, source_checks, cache_context_valid, cached_posts,
+                     source_revision, rows) = _read_source(c, db, folder, alias, anchor, downloads)
                     rows = [r for r in rows if r[0] > last] + [r for r in rows if r[0] <= last]
                     c.progress(stage='local_aliases', completed=0, total=len(rows))
                     c.setting('local_alias_next', alias)
@@ -208,17 +286,8 @@ def reuse_local_aliases(c, max_files=200, seconds=20):
                             posts = []
                             if file_stamp:
                                 raw = raw_files.read_bytes(path)
-                                if cache_context_valid and source_checks.get(name) == tuple([*file_stamp, PARSER_CACHE_VERSION]):
-                                    parsed = deepcopy(cached_posts.get(name, []))
-                                    for post in parsed:
-                                        for item in post['media']:
-                                            # Source paths are never treated as destination
-                                            # files. The normal copy below validates bytes.
-                                            if item.get('status') == 'saved':
-                                                item.update(status='pending', path='', bytes=0, sha256='')
-                                else:
-                                    parsed = extract(raw.decode('utf-8', errors='replace'), url, ts, alias)
-                                posts = [p for p in parsed
+                                cached = cached_posts.get(name, []) if cache_context_valid and source_checks.get(name) == tuple([*file_stamp, PARSER_CACHE_VERSION]) else None
+                                posts = [p for p in _snapshot_posts(raw, cached, url, ts, alias)
                                          if set(p.get('author_ids', [])) == {anchor}
                                          and (not known_only or p['id'] in existing_ids)]
                             # Recheck ownership before writing if another collector has added evidence.
@@ -239,50 +308,12 @@ def reuse_local_aliases(c, max_files=200, seconds=20):
                                 if post['id'] not in existing_ids:
                                     existing_ids.add(post['id'])
                                     stats['new_posts'] += 1
-                                source_media = {m['key']: m for m in source_posts.get(post['id'], {}).get('media', [])}
-                                proven_keys = {m['key'] for m in post['media']}
-                                for item in merged['media'] if downloads else []:
-                                    if item['key'] not in proven_keys:
-                                        continue
-                                    if target_saved(c, item):
-                                        files.append([item['path'], stamp(contained(c.folder, item['path'], 'media'))])
-                                        continue
-                                    already = available.get(item['key'])
-                                    if already and already['kind'] == item['kind'] and target_saved(c, already):
-                                        urls = list(dict.fromkeys(item['urls'] + already.get('urls', [])))
-                                        item.update(deepcopy(already), urls=urls)
-                                        files.append([item['path'], stamp(contained(c.folder, item['path'], 'media'))])
-                                        continue
-                                    saved = source_media.get(item['key'], {})
-                                    if saved.get('status') != 'saved':
-                                        continue
-                                    failure_key = (alias, post['id'], item['key'])
-                                    if failure_key in failed_media:
-                                        continue
-                                    try:
-                                        result = copy_media(c, folder, saved, post, item)
-                                    except (OSError, ValueError):
-                                        result = None
-                                    if result:
-                                        item.update(result)
-                                        before_files = len(c.budget.reused_paths)
-                                        c.mark_saved(item, local=True)
-                                        stats['reused_files'] += len(c.budget.reused_paths) - before_files
-                                        available[item['key']] = deepcopy(item)
-                                        files.append([item['path'], stamp(contained(c.folder, item['path'], 'media'))])
-                                    else:
-                                        stats['skipped_media'] += 1
-                                        failed_media.add(failure_key)
+                                if downloads:
+                                    files.extend(_reuse_media(c, folder, alias, post, merged, source_posts.get(post['id'], {}),
+                                                              available, failed_media, stats))
                                 c.store.save_post(merged)
                             if posts:
-                                destination = contained(c.folder, 'raw/' + name, 'raw')
-                                if not raw_files.exists(destination):
-                                    raw_files.write_bytes(destination, raw)
-                                if raw_files.read_bytes(destination) == raw:
-                                    c.store.db.execute('INSERT OR IGNORE INTO captures VALUES(?,?,?,?,?,?)', (ts, url, mime, digest, 'done', ''))
-                                    c.store.db.execute("UPDATE captures SET status='done',error='' WHERE timestamp=? AND original=?", (ts, url))
-                                    st = raw_files.logical_stat(destination)
-                                    c.store.db.execute('INSERT OR REPLACE INTO raw_checks VALUES(?,?,?,?)', (name, st.st_size, st.st_mtime_ns, PARSER_CACHE_VERSION))
+                                _keep_raw(c, name, raw, ts, url, mime, digest)
                             with c.store.db:
                                 c.store.db.execute('INSERT OR REPLACE INTO local_alias_checks VALUES(?,?,?,?)',
                                     (alias, name, fingerprint, json.dumps({'posts': [p['id'] for p in posts], 'files': files})))

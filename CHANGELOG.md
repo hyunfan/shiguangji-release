@@ -10,6 +10,7 @@
 - 依赖方向：`original_url` 下沉到 `shiguangji/core/archive_urls.py`（`platforms.extractor` 继续导出），`core` 不再依赖 `platforms`；`identity_discovery`、`local_aliases` 移入 `collect`，`recovery_report` 移入 `storage`；新增基于 `ast` 的依赖方向守护测试，暂不修复的 3 处已知违规列入只减不增的名单。
 - 本地服务：`app.py` 的请求处理拆入 `shiguangji/web/`，GET/POST 改用路由表；“合集是否正在采集”的判断收敛为 `TaskService.collection_active`。`app.py` 仍是入口，启动方式、接口、令牌与来源校验不变。
 - 任务服务：`TaskService` 按职责拆为 `QueueCoordinator`（队列与历史）、`BatchRunner`（自动多批循环）、`ResultFinalizer`（结果解读与导出），`TaskService` 保留为门面，公开方法不变。
+- 长函数：`extractor.extract` 按解析来源拆为固定链接、HTML 容器、JSON、页面元数据等步骤；`reuse_local_aliases` 拆出源合集读取、快照解析、媒体复用与原始快照保存；解析结果与复用行为不变。
 
 ## 1.28.2 · 2026-10-18
 

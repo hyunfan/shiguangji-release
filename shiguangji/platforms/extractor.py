@@ -317,55 +317,70 @@ def api_v2_posts(payload, handle):
             if p["text"] or p["media"]:
                 yield p
 
-def extract(source: str, page_url: str, timestamp: str, handle: str) -> list[dict]:
-    """Only attach media to a known target post container / structured tweet / single-post metadata."""
-    doc = Document(source)
-    nodes = list(doc.root.walk())
-    found = {}
-    capture = {"timestamp": timestamp, "url": page_url, "archive_url": f"https://web.archive.org/web/{timestamp}/{page_url}"}
-    def add(p):
-        p["captures"] = [capture]
-        found[p["id"]] = merge_post(found.get(p["id"], blank_post(p["id"], handle)), p)
-    def dated(p, value):
-        date = iso_date(value)
-        if date:
-            p["created_at"], p["date_source"] = date, "page"
-    def attach(p, urls):
-        for url in urls:
-            m = media_item(url)
-            if m:
-                p["media"].append(m)
-    def link(value):
+class _Page:
+    """Posts found on one captured page; every post carries this capture as evidence."""
+    def __init__(self, page_url: str, timestamp: str, handle: str):
+        self.page_url, self.handle = page_url, handle
+        self.capture = {"timestamp": timestamp, "url": page_url, "archive_url": f"https://web.archive.org/web/{timestamp}/{page_url}"}
+        self.found = {}
+
+    def add(self, p):
+        p["captures"] = [self.capture]
+        self.found[p["id"]] = merge_post(self.found.get(p["id"], blank_post(p["id"], self.handle)), p)
+
+    def link(self, value):
         try:
-            return urljoin(page_url, original_url(value))
+            return urljoin(self.page_url, original_url(value))
         except ValueError:
             return ""
-    # A URL in a target user's timeline is useful evidence even when the HTML is a JS shell.
-    target_pid = post_id(page_url, handle)
+
+
+def _dated(p, value):
+    date = iso_date(value)
+    if date:
+        p["created_at"], p["date_source"] = date, "page"
+
+
+def _attach(p, urls):
+    for url in urls:
+        m = media_item(url)
+        if m:
+            p["media"].append(m)
+
+
+def _permalink_posts(page, nodes, target_pid):
+    """A URL in a target user's timeline is useful evidence even when the HTML is a JS shell."""
     if target_pid:
-        add(blank_post(target_pid, handle))
+        page.add(blank_post(target_pid, page.handle))
     for n in nodes:
         if "href" not in n.attrs:
             continue
-        href = link(n.attrs.get("href", ""))
-        pid = post_id(href, handle)
+        href = page.link(n.attrs.get("href", ""))
+        pid = post_id(href, page.handle)
         if pid:
-            add(blank_post(pid, handle))
-    # Legacy Twitter cards, mobile tables, and server-rendered modern articles.
+            page.add(blank_post(pid, page.handle))
+
+
+def _in_container(x, container):
+    """False for nodes inside a quoted post or a nested post container."""
+    ancestor = x
+    while ancestor is not container and ancestor:
+        if ancestor.has_class("QuoteTweet") or ancestor.has_class("quoted-tweet") or ancestor.attrs.get("data-testid") == "quoteTweet" or (ancestor.tag == "div" and ancestor.attrs.get("role") == "link"):
+            return False
+        if ancestor.attrs.get("data-tweet-id") or ancestor.tag == "article":
+            return False
+        ancestor = ancestor.parent
+    return True
+
+
+def _html_container_posts(page, nodes):
+    """Legacy Twitter cards, mobile tables, and server-rendered modern articles."""
+    handle, link = page.handle, page.link
     for n in nodes:
         is_container = n.attrs.get("data-tweet-id") or n.has_class("tweet") or n.tag == "article"
         if not is_container:
             continue
-        def scoped(x):
-            ancestor = x
-            while ancestor is not n and ancestor:
-                if ancestor.has_class("QuoteTweet") or ancestor.has_class("quoted-tweet") or ancestor.attrs.get("data-testid") == "quoteTweet" or (ancestor.tag == "div" and ancestor.attrs.get("role") == "link"):
-                    return False
-                if ancestor.attrs.get("data-tweet-id") or ancestor.tag == "article":
-                    return False
-                ancestor = ancestor.parent
-            return True
-        descendants = [x for x in n.walk() if scoped(x)]
+        descendants = [x for x in n.walk() if _in_container(x, n)]
         screen = n.attrs.get("data-screen-name", "").lower()
         pid = str(n.attrs.get("data-tweet-id", ""))
         if screen and screen != handle:
@@ -389,13 +404,16 @@ def extract(source: str, page_url: str, timestamp: str, handle: str) -> list[dic
             p["text_source"] = "html"
         for x in descendants:
             if x.tag == "time" or "data-time" in x.attrs or "data-time-ms" in x.attrs:
-                dated(p, x.attrs.get("datetime") or x.attrs.get("data-time-ms") or x.attrs.get("data-time"))
-        attach(p, [link(x.attrs[k]) for x in descendants for k in ("src", "data-image-url", "poster", "data-src", "data-video-url", "data-full-url", "href") if k in x.attrs])
+                _dated(p, x.attrs.get("datetime") or x.attrs.get("data-time-ms") or x.attrs.get("data-time"))
+        _attach(p, [link(x.attrs[k]) for x in descendants for k in ("src", "data-image-url", "poster", "data-src", "data-video-url", "data-full-url", "href") if k in x.attrs])
         for x in descendants:
             for srcset in (x.attrs.get("srcset", ""), x.attrs.get("data-srcset", "")):
-                attach(p, [link(candidate.strip().split()[0]) for candidate in srcset.split(",") if candidate.strip()])
-        add(p)
-    # Raw API JSON and JSON script blocks (including GraphQL legacy objects).
+                _attach(p, [link(candidate.strip().split()[0]) for candidate in srcset.split(",") if candidate.strip()])
+        page.add(p)
+
+
+def _json_payloads(source, nodes):
+    """Raw API JSON and JSON script blocks (including GraphQL legacy objects)."""
     payloads = []
     try:
         payloads.append(json.loads(source))
@@ -415,102 +433,143 @@ def extract(source: str, page_url: str, timestamp: str, handle: str) -> list[dic
                 break
             except (ValueError, RecursionError):
                 continue
-    for payload in payloads:
-        for p in api_v2_posts(payload, handle):
-            add(p)
-        objects = list(walk_json(payload))
-        users = {}
-        for obj in objects:
-            details = mapping(obj.get("legacy")) or obj
-            screen = details.get("screen_name")
-            uid = str(obj.get("rest_id") or details.get("id_str") or details.get("id") or "")
-            if screen and uid:
-                users[uid] = str(screen).lower()
-        for obj in objects:
-            if obj.get("@type") == "SocialMediaPosting":
-                author = mapping(obj.get("author"))
-                post_url = obj.get("url") or mapping(obj.get("mainEntityOfPage")).get("@id") or page_url
-                pid = post_id(str(post_url), handle)
-                if pid and belongs(str(author.get("url", "")), handle):
-                    p = blank_post(pid, handle)
-                    p["text"] = str(obj.get("articleBody") or obj.get("text") or "")
-                    p["text_source"] = "json_ld"
-                    dated(p, obj.get("datePublished") or obj.get("dateCreated"))
-                    for media in (obj.get("image"), obj.get("video"), obj.get("associatedMedia")):
-                        for entry in media if isinstance(media, list) else [media]:
-                            attach(p, [entry if isinstance(entry, str) else mapping(entry).get("contentUrl", "")])
-                    add(p)
-            legacy = obj.get("legacy") if isinstance(obj.get("legacy"), dict) else obj
-            pid = str(legacy.get("id_str") or obj.get("rest_id") or legacy.get("id") or "")
-            user = mapping(obj.get("user")) or mapping(mapping(mapping(obj.get("core")).get("user_results")).get("result"))
-            screen = str(user.get("screen_name") or mapping(user.get("legacy")).get("screen_name") or mapping(user.get("core")).get("screen_name") or users.get(str(legacy.get("user_id_str") or legacy.get("user_id")), "")).lower()
-            extended = mapping(legacy.get("extended_tweet"))
-            note = mapping(mapping(mapping(obj.get("note_tweet")).get("note_tweet_results")).get("result"))
-            texts = [(legacy.get("text"), "json"), (legacy.get("full_text"), "json"),
-                     (extended.get("full_text"), "extended_tweet"), (note.get("text"), "note_tweet")]
-            texts = [(html.unescape(value), origin) for value, origin in texts if isinstance(value, str) and value]
-            if not pid.isdigit() or screen != handle or not texts:
-                continue
-            p = blank_post(pid, handle)
-            uid = str(user.get("rest_id") or user.get("id_str") or user.get("id") or mapping(user.get("legacy")).get("id_str") or legacy.get("user_id_str") or legacy.get("user_id") or "")
-            if uid.isdigit():
-                p["author_ids"] = [uid]
-                p["observed_usernames"] = [handle]
-            p["text"], p["text_source"] = max(texts, key=lambda item: (TEXT_PRIORITY[item[1]], len(item[0])))
-            p["text_versions"] = list(dict.fromkeys(value for value, origin in texts if value != p["text"]))
-            dated(p, legacy.get("created_at"))
-            entries = []
-            for container in (legacy, extended, note):
-                for key in ("entities", "extended_entities", "entity_set"):
-                    media = mapping(container.get(key)).get("media")
-                    if isinstance(media, list):
-                        entries.extend(media)
-            # Legacy reposts can repeat the original author's attachments at
-            # the outer level, even without source_status_id on each entry.
-            if any(container.get(key) for container in (obj, legacy)
-                   for key in ('retweeted_status', 'retweeted_status_result',
-                               'retweeted_status_id', 'retweeted_status_id_str')):
-                entries = []
-            for entry in entries:
-                if not media_belongs_to_post(entry, pid):
-                    continue
-                attach(p, [entry.get("media_url_https") or entry.get("media_url", "")])
-                variants = [v for v in mapping(entry.get("video_info")).get("variants", []) or [] if isinstance(v, dict)]
-                # Preserve every MP4 rendition, so a missing high-quality capture can fall back.
-                def bitrate(variant):
-                    try:
-                        return max(0, int(variant.get("bitrate") or 0))
-                    except (ValueError, TypeError, OverflowError):
-                        return 0
-                for v in sorted(variants, key=bitrate, reverse=True):
-                    attach(p, [v.get("url", "")])
-            add(p)
-    # Metadata is scoped to the page's own post, never to a profile or a reply.
+    return payloads
+
+
+def _known_users(objects):
+    users = {}
+    for obj in objects:
+        details = mapping(obj.get("legacy")) or obj
+        screen = details.get("screen_name")
+        uid = str(obj.get("rest_id") or details.get("id_str") or details.get("id") or "")
+        if screen and uid:
+            users[uid] = str(screen).lower()
+    return users
+
+
+def _json_ld_post(page, obj):
+    handle = page.handle
+    author = mapping(obj.get("author"))
+    post_url = obj.get("url") or mapping(obj.get("mainEntityOfPage")).get("@id") or page.page_url
+    pid = post_id(str(post_url), handle)
+    if pid and belongs(str(author.get("url", "")), handle):
+        p = blank_post(pid, handle)
+        p["text"] = str(obj.get("articleBody") or obj.get("text") or "")
+        p["text_source"] = "json_ld"
+        _dated(p, obj.get("datePublished") or obj.get("dateCreated"))
+        for media in (obj.get("image"), obj.get("video"), obj.get("associatedMedia")):
+            for entry in media if isinstance(media, list) else [media]:
+                _attach(p, [entry if isinstance(entry, str) else mapping(entry).get("contentUrl", "")])
+        page.add(p)
+
+
+def _variant_bitrate(variant):
+    try:
+        return max(0, int(variant.get("bitrate") or 0))
+    except (ValueError, TypeError, OverflowError):
+        return 0
+
+
+def _legacy_tweet_post(page, obj, users):
+    """A REST/GraphQL tweet object by the target handle, or None."""
+    handle = page.handle
+    legacy = obj.get("legacy") if isinstance(obj.get("legacy"), dict) else obj
+    pid = str(legacy.get("id_str") or obj.get("rest_id") or legacy.get("id") or "")
+    user = mapping(obj.get("user")) or mapping(mapping(mapping(obj.get("core")).get("user_results")).get("result"))
+    screen = str(user.get("screen_name") or mapping(user.get("legacy")).get("screen_name") or mapping(user.get("core")).get("screen_name") or users.get(str(legacy.get("user_id_str") or legacy.get("user_id")), "")).lower()
+    extended = mapping(legacy.get("extended_tweet"))
+    note = mapping(mapping(mapping(obj.get("note_tweet")).get("note_tweet_results")).get("result"))
+    texts = [(legacy.get("text"), "json"), (legacy.get("full_text"), "json"),
+             (extended.get("full_text"), "extended_tweet"), (note.get("text"), "note_tweet")]
+    texts = [(html.unescape(value), origin) for value, origin in texts if isinstance(value, str) and value]
+    if not pid.isdigit() or screen != handle or not texts:
+        return None
+    p = blank_post(pid, handle)
+    uid = str(user.get("rest_id") or user.get("id_str") or user.get("id") or mapping(user.get("legacy")).get("id_str") or legacy.get("user_id_str") or legacy.get("user_id") or "")
+    if uid.isdigit():
+        p["author_ids"] = [uid]
+        p["observed_usernames"] = [handle]
+    p["text"], p["text_source"] = max(texts, key=lambda item: (TEXT_PRIORITY[item[1]], len(item[0])))
+    p["text_versions"] = list(dict.fromkeys(value for value, origin in texts if value != p["text"]))
+    _dated(p, legacy.get("created_at"))
+    entries = []
+    for container in (legacy, extended, note):
+        for key in ("entities", "extended_entities", "entity_set"):
+            media = mapping(container.get(key)).get("media")
+            if isinstance(media, list):
+                entries.extend(media)
+    # Legacy reposts can repeat the original author's attachments at
+    # the outer level, even without source_status_id on each entry.
+    if any(container.get(key) for container in (obj, legacy)
+           for key in ('retweeted_status', 'retweeted_status_result',
+                       'retweeted_status_id', 'retweeted_status_id_str')):
+        entries = []
+    for entry in entries:
+        if not media_belongs_to_post(entry, pid):
+            continue
+        _attach(p, [entry.get("media_url_https") or entry.get("media_url", "")])
+        variants = [v for v in mapping(entry.get("video_info")).get("variants", []) or [] if isinstance(v, dict)]
+        # Preserve every MP4 rendition, so a missing high-quality capture can fall back.
+        for v in sorted(variants, key=_variant_bitrate, reverse=True):
+            _attach(p, [v.get("url", "")])
+    return p
+
+
+def _json_posts(page, payload):
+    for p in api_v2_posts(payload, page.handle):
+        page.add(p)
+    objects = list(walk_json(payload))
+    users = _known_users(objects)
+    for obj in objects:
+        if obj.get("@type") == "SocialMediaPosting":
+            _json_ld_post(page, obj)
+        p = _legacy_tweet_post(page, obj, users)
+        if p is not None:
+            page.add(p)
+
+
+def _metadata_post(page, nodes, target_pid):
+    """Metadata is scoped to the page's own post, never to a profile or a reply."""
+    meta_entries = [(n.attrs.get("property") or n.attrs.get("name"), n.attrs.get("content", "")) for n in nodes if n.tag == "meta"]
+    meta = dict(meta_entries)
+    # A captured status URL may contain the metadata of a different post.
+    # Keep its permalink evidence, but never attach that other author's content.
+    metadata_pid = post_id(page.link(meta.get("og:url", "")))
+    if metadata_pid and metadata_pid != target_pid:
+        meta, meta_entries = {}, []
+    p = blank_post(target_pid, page.handle)
+    description = meta.get("og:description") or meta.get("twitter:description") or ""
+    if description and description.strip().lower() not in GENERIC_DESCRIPTIONS:
+        p["text"] = description
+        p["text_source"] = "metadata"
+    _dated(p, meta.get("article:published_time"))
+    _attach(p, [page.link(v) for k, v in meta_entries if k in {"og:image", "og:video", "og:video:url", "og:video:secure_url", "twitter:image", "twitter:image:src", "twitter:player:stream"}])
+    page.add(p)
+
+
+def _explain_missing_text(p, source):
+    lower = source.lower()
+    if "age-restricted adult content" in lower or "you’ll need to log in" in lower or "you'll need to log in" in lower:
+        p.update(content_note="这份快照保存的是登录或年龄限制提示，没有公开可提取的正文。", content_reason="restricted")
+    elif any(s in lower for s in ("this tweet was deleted", "this post was deleted", "this tweet is unavailable", "this post is unavailable")):
+        p.update(content_note="这份快照提示帖子已删除或不可用。", content_reason="unavailable")
+    elif "javascript" in lower and "tweettext" not in lower:
+        p.update(content_note="这份快照只有页面框架，未包含帖子正文。", content_reason="shell")
+    else:
+        p.update(content_note="已读取快照，但未找到可可靠归属的正文。", content_reason="unparsed")
+
+
+def extract(source: str, page_url: str, timestamp: str, handle: str) -> list[dict]:
+    """Only attach media to a known target post container / structured tweet / single-post metadata."""
+    nodes = list(Document(source).root.walk())
+    page = _Page(page_url, timestamp, handle)
+    target_pid = post_id(page_url, handle)
+    _permalink_posts(page, nodes, target_pid)
+    _html_container_posts(page, nodes)
+    for payload in _json_payloads(source, nodes):
+        _json_posts(page, payload)
     if target_pid:
-        meta_entries = [(n.attrs.get("property") or n.attrs.get("name"), n.attrs.get("content", "")) for n in nodes if n.tag == "meta"]
-        meta = dict(meta_entries)
-        # A captured status URL may contain the metadata of a different post.
-        # Keep its permalink evidence, but never attach that other author's content.
-        metadata_pid = post_id(link(meta.get("og:url", "")))
-        if metadata_pid and metadata_pid != target_pid:
-            meta, meta_entries = {}, []
-        p = blank_post(target_pid, handle)
-        description = meta.get("og:description") or meta.get("twitter:description") or ""
-        if description and description.strip().lower() not in GENERIC_DESCRIPTIONS:
-            p["text"] = description
-            p["text_source"] = "metadata"
-        dated(p, meta.get("article:published_time"))
-        attach(p, [link(v) for k, v in meta_entries if k in {"og:image", "og:video", "og:video:url", "og:video:secure_url", "twitter:image", "twitter:image:src", "twitter:player:stream"}])
-        add(p)
-    if target_pid and not found[target_pid]["text"]:
-        lower = source.lower()
-        p = found[target_pid]
-        if "age-restricted adult content" in lower or "you’ll need to log in" in lower or "you'll need to log in" in lower:
-            p.update(content_note="这份快照保存的是登录或年龄限制提示，没有公开可提取的正文。", content_reason="restricted")
-        elif any(s in lower for s in ("this tweet was deleted", "this post was deleted", "this tweet is unavailable", "this post is unavailable")):
-            p.update(content_note="这份快照提示帖子已删除或不可用。", content_reason="unavailable")
-        elif "javascript" in lower and "tweettext" not in lower:
-            p.update(content_note="这份快照只有页面框架，未包含帖子正文。", content_reason="shell")
-        else:
-            p.update(content_note="已读取快照，但未找到可可靠归属的正文。", content_reason="unparsed")
-    return list(found.values())
+        _metadata_post(page, nodes, target_pid)
+    if target_pid and not page.found[target_pid]["text"]:
+        _explain_missing_text(page.found[target_pid], source)
+    return list(page.found.values())
