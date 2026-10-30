@@ -26,19 +26,11 @@ SELF_SPAWNED = ('cloud_backup', 'cloud_media', 'backup_library', 'compact_librar
 # tier. Package modules never import root scripts.
 TIERS = {'core': 0, 'platforms': 1, 'sources': 2, 'media': 2, 'storage': 2, 'collect': 3, 'tasks': 4, 'web': 5}
 # Known violations that are not yet safe to fix, as (module file, imported module).
-# This list may only shrink: a new violation fails, and so does an entry that no longer occurs.
-KNOWN_VIOLATIONS = {
-    # Lazy import while rescanning raw pages for identity hints; compressed_files needs
-    # storage.storage_guard, so moving it under core would drag storage policy down a tier.
-    ('shiguangji/platforms/account_identity.py', 'shiguangji.storage.compressed_files'),
-    # Lazy import: the export manifest embeds the task summary shown in the offline page.
-    # task_status depends on task_compat; splitting the summary out needs a behavioural review.
-    ('shiguangji/storage/collection_export.py', 'shiguangji.tasks.task_status'),
-    # Lazy import of ProcessReference from the root supervisor to identify the backup worker
-    # process; moving it changes how the separately started worker is located.
-    ('shiguangji/storage/cloud_backup.py', 'supervisor'),
-}
-MAX_KNOWN_VIOLATIONS = 3
+# The list is empty and may only shrink: any new violation fails the layout test. Fix the
+# dependency (move shared code down a tier, as core.stored_text, core.task_summary and
+# system.process_reference did) instead of adding an entry here.
+KNOWN_VIOLATIONS = frozenset()
+MAX_KNOWN_VIOLATIONS = 0
 
 
 def imported_modules(tree):
@@ -140,11 +132,33 @@ class PackageLayoutTests(unittest.TestCase):
             (root / 'shiguangji' / 'system' / 'bad.py').write_text('import shiguangji.tasks.task_queue\n')
             (root / 'shiguangji' / 'media' / 'ok.py').write_text('from shiguangji.sources import source_http\nfrom shiguangji.system import reliability\n')
             (root / 'shiguangji' / 'tasks' / 'bad.py').write_text('import app\n')
+            # The three shapes that used to be whitelisted: lazy imports of a higher tier or a root script.
+            (root / 'supervisor.py').write_text('')
+            (root / 'shiguangji' / 'platforms' / 'lazy.py').write_text(
+                'def scan():\n    from shiguangji.storage.compressed_files import read_text\n')
+            (root / 'shiguangji' / 'storage' / 'lazy.py').write_text(
+                'def export():\n    from shiguangji.tasks.task_status import summary\n'
+                'def watch():\n    from supervisor import ProcessReference\n')
             self.assertEqual(dependency_violations(root), {
                 ('shiguangji/core/bad.py', 'shiguangji.platforms.extractor'),
                 ('shiguangji/platforms/bad.py', 'shiguangji.storage.compressed_files'),
                 ('shiguangji/system/bad.py', 'shiguangji.tasks.task_queue'),
-                ('shiguangji/tasks/bad.py', 'app')})
+                ('shiguangji/tasks/bad.py', 'app'),
+                ('shiguangji/platforms/lazy.py', 'shiguangji.storage.compressed_files'),
+                ('shiguangji/storage/lazy.py', 'shiguangji.tasks.task_status'),
+                ('shiguangji/storage/lazy.py', 'supervisor')})
+
+    def test_empty_whitelist_still_rejects_a_new_violation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for package in (*TIERS, 'system'):
+                (root / 'shiguangji' / package).mkdir(parents=True)
+            (root / 'shiguangji' / 'core' / 'clean.py').write_text('import json\n')
+            self.assertEqual(dependency_violations(root) - KNOWN_VIOLATIONS, set())
+            (root / 'shiguangji' / 'storage' / 'late.py').write_text(
+                'def later():\n    from shiguangji.web import server\n')
+            self.assertEqual(dependency_violations(root) - KNOWN_VIOLATIONS,
+                             {('shiguangji/storage/late.py', 'shiguangji.web.server')})
 
 
 if __name__ == '__main__':

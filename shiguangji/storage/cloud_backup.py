@@ -442,7 +442,7 @@ def main():
     parser.add_argument('--username', help='Optional one-collection verification run')
     args = parser.parse_args()
     if args.parent_pid:
-        from supervisor import ProcessReference
+        from shiguangji.system.process_reference import ProcessReference
         parent = ProcessReference(args.parent_pid)
         def watch_parent():
             while parent.alive():

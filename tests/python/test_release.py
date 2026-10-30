@@ -1,6 +1,9 @@
 """Release installation/rollback with only temporary fake installations."""
+from contextlib import redirect_stdout
 import hashlib
+import io
 import json
+import os
 from pathlib import Path, PurePosixPath
 import tempfile
 import unittest
@@ -174,3 +177,67 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(len(deploy_release.LEGACY_ROOT_MODULES),52)
         self.assertEqual(set(deploy_release.LEGACY_ROOT_MODULES)-shipped,set())
         self.assertFalse({path.name for path in root.glob('*.py')}&deploy_release.LEGACY_ROOT_MODULES)
+
+    BYTECODE={'shiguangji/__pycache__/__init__.cpython-310.pyc':'keep',          # source still shipped
+              'shiguangji/collect/__pycache__/archive.cpython-313.pyc':'keep',  # replaced, not removed
+              'shiguangji/__pycache__/old.cpython-310.pyc':'drop',              # source dropped by upgrade
+              'shiguangji/__pycache__/old.cpython-313.opt-1.pyc':'drop',
+              'shiguangji/gone/__pycache__/mod.cpython-310.pyc':'drop',         # whole subpackage dropped
+              'shiguangji/legacy.pyc':'drop',                                   # sourceless, still importable
+              '__pycache__/archive.cpython-310.pyc':'keep',                     # outside the package
+              'collections/alice/__pycache__/x.cpython-310.pyc':'keep',         # user data is never touched
+              'tools/lib/__pycache__/y.cpython-310.pyc':'keep'}
+
+    def install_with_bytecode(self):
+        self.install_previous_release({'app.py':b'old','launcher.py':b'old','shiguangji/__init__.py':b'',
+                                       'shiguangji/old.py':b'old module','shiguangji/gone/mod.py':b'old sub',
+                                       'shiguangji/collect/archive.py':b'old archive'})
+        for name in self.BYTECODE:
+            path=self.target/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'pyc')
+        self.package_files({'app.py':b'new','launcher.py':b'new','shiguangji/__init__.py':b'',
+                            'shiguangji/collect/archive.py':b'new archive'})
+
+    def test_upgrade_removes_bytecode_whose_package_source_is_gone(self):
+        self.install_with_bytecode()
+        output=io.StringIO()
+        with redirect_stdout(output):self.run_deploy()
+        for name,fate in self.BYTECODE.items():
+            self.assertEqual((self.target/name).exists(),fate=='keep',name)
+        self.assertFalse((self.target/'shiguangji/gone').exists())
+        self.assertTrue((self.target/'shiguangji/__pycache__').is_dir())
+        self.assertTrue((self.target/'shiguangji/__init__.py').is_file())
+        self.assertEqual(json.loads(output.getvalue())['bytecode_removed'],4)
+        # Bytecode is never part of the backup: rollback restores sources, Python rebuilds caches.
+        with zipfile.ZipFile(next((self.root/'backups').glob('*.zip'))) as saved:
+            self.assertFalse([name for name in saved.namelist() if name.endswith('.pyc')])
+            self.assertEqual(saved.read('shiguangji/old.py'),b'old module')
+
+    def test_failed_upgrade_leaves_bytecode_for_rollback_untouched(self):
+        self.install_with_bytecode()
+        state={'app':'x-wayback-library','data_dir':str(self.target/'collections'),'job':{'running':False}}
+        healthy=[state,None]
+        def health(port):
+            return healthy.pop(0) if healthy else None
+        with patch.object(deploy_release,'health',side_effect=health),patch.object(deploy_release.subprocess,'run'):
+            with self.assertRaisesRegex(RuntimeError,'health check'):
+                deploy_release.deploy(self.package,self.target,self.root/'backups',8766)
+        for name in self.BYTECODE:
+            self.assertTrue((self.target/name).is_file(),name)
+        self.assertEqual((self.target/'shiguangji/old.py').read_bytes(),b'old module')
+        self.assertEqual(deploy_release.stale_bytecode(self.target),[self.target/'shiguangji/legacy.pyc'])
+
+    def test_bytecode_cleanup_is_best_effort_and_stays_inside_the_package(self):
+        package=self.target/'shiguangji'/'__pycache__';package.mkdir(parents=True)
+        locked=package/'locked.cpython-310.pyc';locked.write_bytes(b'pyc')
+        with patch.object(Path,'unlink',side_effect=PermissionError('in use')):
+            self.assertEqual(deploy_release.remove_stale_bytecode(self.target),0)
+        self.assertTrue(locked.is_file())
+        outside=self.root/'outside.pyc';outside.write_bytes(b'pyc')
+        try:
+            os.symlink(outside,package/'linked.cpython-310.pyc')
+        except (OSError,NotImplementedError):
+            self.skipTest('symlinks unavailable')
+        self.assertEqual(deploy_release.stale_bytecode(self.target),[locked])
+        self.assertEqual(deploy_release.remove_stale_bytecode(self.target),1)
+        self.assertTrue(outside.is_file())
+        self.assertEqual(deploy_release.stale_bytecode(self.root/'no-install'),[])

@@ -14,4 +14,4 @@ select = ["F", "B"]
 # `from` would change the recorded tracebacks.
 "deploy_release.py" = ["B904"]
 "launcher.py" = ["B904"]
-"shiguangji/storage/compressed_files.py" = ["B904"]
+"shiguangji/core/stored_text.py" = ["B904"]

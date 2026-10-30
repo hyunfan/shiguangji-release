@@ -3,94 +3,18 @@
 Plain files remain readable. A .gz sibling is a storage detail; backup indexes
 and cloud bundles always describe the original uncompressed bytes.
 """
-from contextlib import contextmanager
 import gzip
 import hashlib
 import os
 from pathlib import Path
-import shutil
-import struct
 import tempfile
-from types import SimpleNamespace
 
 from shiguangji.core.atomic_io import replace_file
+# Read helpers live in core so lower tiers can use them; re-exported for existing callers.
+from shiguangji.core.stored_text import (  # noqa: F401
+    CHUNK, MAX_TEXT, copy_stored, digest_stored, exists, logical_stat, matches, open_stored,
+    packed_path, read_bytes, read_text, safe)
 from shiguangji.storage.storage_guard import require_space
-
-CHUNK = 1024 * 1024
-MAX_TEXT = 256 * CHUNK
-
-
-def packed_path(path):
-    return Path(str(path) + '.gz')
-
-
-def safe(path, root):
-    path, root = Path(path), Path(root).resolve()
-    if path.is_symlink() or not path.resolve().is_relative_to(root):
-        raise ValueError('压缩文件路径超出资料目录')
-    return path
-
-
-@contextmanager
-def open_stored(path):
-    """Prefer a plain copy after interruption; tolerate atomic migration races."""
-    path = Path(path)
-    safe(path, path.parent)
-    try:
-        reader = path.open('rb')
-    except FileNotFoundError:
-        compressed = safe(packed_path(path), path.parent)
-        reader = gzip.open(compressed, 'rb')
-    with reader:
-        yield reader
-
-
-def exists(path):
-    return Path(path).is_file() or packed_path(path).is_file()
-
-
-def logical_stat(path):
-    path = Path(path)
-    safe(path, path.parent)
-    try:
-        return path.stat()
-    except FileNotFoundError:
-        compressed = safe(packed_path(path), path.parent)
-        with compressed.open('rb') as reader:
-            st = os.fstat(reader.fileno())
-            if reader.read(2) != b'\x1f\x8b':
-                raise ValueError('压缩网页格式无效')
-            reader.seek(-4, 2)
-            size = struct.unpack('<I', reader.read(4))[0]
-        return SimpleNamespace(st_size=size, st_mtime_ns=st.st_mtime_ns)
-
-
-def read_bytes(path):
-    with open_stored(path) as reader:
-        data = reader.read(MAX_TEXT + 1)
-        if len(data) > MAX_TEXT:
-            raise ValueError('历史网页超过安全读取大小')
-        return data
-
-
-def read_text(path):
-    # Match Path.read_text's universal newline handling on existing Windows files.
-    return read_bytes(path).decode('utf-8', errors='replace').replace('\r\n','\n').replace('\r','\n')
-
-
-def digest_stored(path):
-    value = hashlib.sha256()
-    with open_stored(path) as reader:
-        for block in iter(lambda: reader.read(CHUNK), b''):
-            value.update(block)
-    return value.hexdigest()
-
-
-def matches(path, expected):
-    try:
-        return digest_stored(path) == expected
-    except (OSError, ValueError, EOFError):
-        return False
 
 
 def _check_gzip(path, expected, size):
@@ -191,11 +115,6 @@ def logical_files(folder):
             if logical not in seen:
                 seen.add(logical)
                 yield logical
-
-
-def copy_stored(source, target):
-    with open_stored(source) as reader, Path(target).open('wb') as writer:
-        shutil.copyfileobj(reader, writer, CHUNK)
 
 
 def expand_file(path, root, expected=None):

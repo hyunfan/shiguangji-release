@@ -8,6 +8,7 @@ from pathlib import Path
 from shiguangji.core.atomic_io import atomic_write_bytes, atomic_write_text, publish_if_changed, replace_file
 from shiguangji.storage.collection_lock import collection_lock
 from shiguangji.core.archive_support import ROOT, now, write_json
+from shiguangji.core.task_summary import summary
 from shiguangji.platforms.account_identity import snapshot as identity_snapshot
 from shiguangji.media.media_inventory import inventory
 from shiguangji.storage.storage_guard import require_space
@@ -53,7 +54,6 @@ def export_collection(store, status, errors, full=True, run_info=None):
                 "scope_note": "历史页面与公开来源补全的媒体会分别标注来源；当前原始链接不等于历史快照。恢复范围取决于可访问资料，时间按发帖时间排列。"}
     if is_instagram(store.handle):
         manifest["scope_note"] = "Instagram 仅恢复公开历史快照中可核实归属的帖子和媒体。没有留下可访问存档的已删除内容无法恢复；不代表全部发帖，也不判断帖子当前是否已删除。未知发帖日期单独列出。"
-    from shiguangji.tasks.task_status import summary
     last = manifest['last_run']
     counts['text_recovery_pending'] = int(last.get('post_recovery',{}).get('pending',0))
     from shiguangji.storage.recovery_report import report

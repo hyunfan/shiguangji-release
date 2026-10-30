@@ -74,6 +74,41 @@ def stale_program_files(target, new_files):
     return stale
 
 
+def stale_bytecode(target):
+    """Compiled files under shiguangji/ whose source module no longer exists.
+
+    A sourceless .pyc beside a removed module stays importable, and orphaned
+    __pycache__ entries outlive every upgrade. Only bytecode is a candidate:
+    it is a cache that Python rebuilds from any restored source, so removing it
+    never affects rollback, which restores sources from the backup zip.
+    """
+    package=Path(target)/'shiguangji'
+    if package.is_symlink() or not package.is_dir():return []
+    root=package.resolve();stale=[]
+    for path in sorted(package.rglob('*.pyc')):
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):continue
+        if path.parent.name=='__pycache__':source=path.parent.parent/(path.name.split('.',1)[0]+'.py')
+        else:source=path.with_suffix('.py')
+        if not source.is_file():stale.append(path)
+    return stale
+
+
+def remove_stale_bytecode(target):
+    """Best effort after a successful upgrade; a locked or vanished file is left alone."""
+    removed,package=0,Path(target)/'shiguangji'
+    for path in stale_bytecode(target):
+        try:path.unlink();removed+=1
+        except OSError:continue
+        cache=path.parent
+        if cache.name=='__pycache__':
+            for folder in (cache,cache.parent):
+                # Drop a cache folder (and a package folder left with nothing but it) once empty.
+                if folder==package:break
+                try:folder.rmdir()
+                except OSError:break
+    return removed
+
+
 def deploy(package, target, backup_root, port):
     target=Path(target).resolve();backup_root=Path(backup_root).resolve()
     if not (target/'app.py').is_file() or not (target/'launcher.py').is_file():raise ValueError('Not an existing installation')
@@ -139,7 +174,9 @@ def deploy(package, target, backup_root, port):
             else:atomic_write_bytes(path,data)
         if state:subprocess.run([sys.executable,str(target/'launcher.py'),'--no-open','--port',str(port)],timeout=60,**hidden)
         raise
-    print(json.dumps({'version':manifest['version'],'target':str(target),'files':len(payload),'removed':len(stale),'backup':str(backup),'restarted':bool(state)},ensure_ascii=False))
+    # Only after the upgrade is final: any rollback above still finds the tree exactly as before.
+    bytecode=remove_stale_bytecode(target)
+    print(json.dumps({'version':manifest['version'],'target':str(target),'files':len(payload),'removed':len(stale),'bytecode_removed':bytecode,'backup':str(backup),'restarted':bool(state)},ensure_ascii=False))
 
 
 if __name__=='__main__':
