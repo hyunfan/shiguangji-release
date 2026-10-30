@@ -59,8 +59,9 @@ root = pathlib.Path.cwd().resolve()
 assert pathlib.Path(sys.executable).resolve() == root/'python/python.exe'
 assert sys.flags.isolated and sys.flags.no_site
 assert all(pathlib.Path(p).resolve().is_relative_to(root) for p in sys.path), sys.path
-for source in root.glob('*.py'):
-    importlib.import_module(source.stem)
+for source in [*root.glob('*.py'), *sorted(root.glob('shiguangji/**/*.py'))]:
+    parts = source.relative_to(root).with_suffix('').parts
+    importlib.import_module('.'.join(parts[:-1] if parts[-1] == '__init__' else parts))
 assert ssl.create_default_context().cert_store_stats()['x509'] > 0
 db = sqlite3.connect(root/'runtime/portable-probe.sqlite')
 db.execute('create table if not exists probe(value text)')
