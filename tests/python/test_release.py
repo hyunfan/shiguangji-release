@@ -1,13 +1,13 @@
 """Release installation/rollback with only temporary fake installations."""
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
 import deploy_release
-from atomic_io import atomic_write_bytes
+from shiguangji.core.atomic_io import atomic_write_bytes
 
 
 class ReleaseTests(unittest.TestCase):
@@ -77,3 +77,100 @@ class ReleaseTests(unittest.TestCase):
             stop.assert_not_called()
         self.assertFalse((self.root/'backups').exists())
         self.assertEqual((self.target/'app.py').read_bytes(),b'old')
+
+    def install_previous_release(self,files):
+        for name,data in files.items():
+            path=self.target/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+        (self.target/'release.json').write_text(json.dumps({'version':'1.28.2','files':{name:hashlib.sha256(data).hexdigest() for name,data in files.items()}}))
+
+    def protected_fixture(self):
+        protected={'collections/alice/manifest.json':b'user data','runtime/http-8766.log':b'log',
+                   'tools/ffmpeg/ffmpeg.exe':b'ffmpeg','python/python.exe':b'runtime','diagnostics/x.txt':b'diag',
+                   'config.json':b'settings','notes.py':b'user script'}
+        for name,data in protected.items():
+            path=self.target/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+        return protected
+
+    def test_upgrade_removes_files_dropped_from_installed_manifest_and_keeps_user_data(self):
+        old={'app.py':b'old','launcher.py':b'old','archive.py':b'old archive','extractor.py':b'old extractor',
+             'static/old.js':b'old js','python/python.exe':b'runtime','portable.json':b'{}','README.md':b'docs'}
+        self.install_previous_release(old)
+        protected=self.protected_fixture()
+        self.package_files({'app.py':b'new','launcher.py':b'new','shiguangji/__init__.py':b'',
+                            'shiguangji/collect/archive.py':b'new archive'})
+        self.run_deploy()
+        for name in ('archive.py','extractor.py','static/old.js'):
+            self.assertFalse((self.target/name).exists(),name)
+        # Listed but not program code: the embedded runtime, its marker and documentation stay.
+        for name in ('python/python.exe','portable.json','README.md'):
+            self.assertTrue((self.target/name).exists(),name)
+        for name,data in protected.items():
+            self.assertEqual((self.target/name).read_bytes(),data,name)
+        self.assertEqual((self.target/'collections/keep.txt').read_bytes(),b'untouched')
+        self.assertEqual((self.target/'shiguangji/collect/archive.py').read_bytes(),b'new archive')
+        with zipfile.ZipFile(next((self.root/'backups').glob('*.zip'))) as saved:
+            rollback=json.loads(saved.read('rollback-files.json'))
+            self.assertEqual(sorted(rollback['removed']),['archive.py','extractor.py','static/old.js'])
+            self.assertEqual(saved.read('archive.py'),b'old archive')
+            self.assertEqual(saved.read('static/old.js'),b'old js')
+        self.assertIn('shiguangji/__init__.py',json.loads((self.target/'release.json').read_text())['files'])
+
+    def test_install_without_manifest_removes_only_legacy_root_modules(self):
+        for name in ('archive.py','task_service.py','atomic_io.py'):(self.target/name).write_bytes(b'legacy '+name.encode())
+        protected=self.protected_fixture()
+        self.package_files({'app.py':b'new','launcher.py':b'new','shiguangji/__init__.py':b''})
+        self.run_deploy()
+        for name in ('archive.py','task_service.py','atomic_io.py'):
+            self.assertFalse((self.target/name).exists(),name)
+        for name,data in protected.items():
+            self.assertEqual((self.target/name).read_bytes(),data,name)
+        self.assertEqual((self.target/'app.py').read_bytes(),b'new')
+
+    def test_legacy_cleanup_requires_package_layout_in_new_release(self):
+        (self.target/'archive.py').write_bytes(b'legacy')
+        self.package_files({'app.py':b'new'})
+        self.run_deploy()
+        self.assertEqual((self.target/'archive.py').read_bytes(),b'legacy')
+
+    def test_failed_upgrade_restores_removed_files(self):
+        old={'app.py':b'old','launcher.py':b'old','archive.py':b'old archive','static/old.js':b'old js'}
+        self.install_previous_release(old)
+        previous_manifest=(self.target/'release.json').read_bytes()
+        protected=self.protected_fixture()
+        self.package_files({'app.py':b'new','launcher.py':b'new','shiguangji/__init__.py':b''})
+        state={'app':'x-wayback-library','data_dir':str(self.target/'collections'),'job':{'running':False}}
+        healthy=[state,None]  # running before upgrade, stopped for replacement
+        def health(port):
+            return healthy.pop(0) if healthy else None
+        with patch.object(deploy_release,'health',side_effect=health),patch.object(deploy_release.subprocess,'run'):
+            with self.assertRaisesRegex(RuntimeError,'health check'):
+                deploy_release.deploy(self.package,self.target,self.root/'backups',8766)
+        self.assertEqual((self.target/'archive.py').read_bytes(),b'old archive')
+        self.assertEqual((self.target/'static/old.js').read_bytes(),b'old js')
+        self.assertEqual((self.target/'app.py').read_bytes(),b'old')
+        self.assertEqual((self.target/'release.json').read_bytes(),previous_manifest)
+        self.assertFalse((self.target/'shiguangji/__init__.py').exists())
+        for name,data in protected.items():
+            self.assertEqual((self.target/name).read_bytes(),data,name)
+
+    def test_cleanup_ignores_unsafe_or_linked_manifest_entries(self):
+        outside=self.root/'outside.py';outside.write_bytes(b'outside')
+        (self.target/'release.json').write_text(json.dumps({'version':'old','files':{
+            '../outside.py':'x','collections/keep.txt':'x','C:/x.py':'x','runtime/a.py':'x','tools/t.py':'x'}}))
+        (self.target/'runtime').mkdir();(self.target/'runtime/a.py').write_bytes(b'keep')
+        (self.target/'tools').mkdir();(self.target/'tools/t.py').write_bytes(b'keep')
+        self.assertEqual(deploy_release.stale_program_files(self.target,{'app.py':b'','shiguangji/__init__.py':b''}),[])
+        self.package_files({'app.py':b'new','shiguangji/__init__.py':b''})
+        self.run_deploy()
+        self.assertEqual(outside.read_bytes(),b'outside')
+        self.assertEqual((self.target/'runtime/a.py').read_bytes(),b'keep')
+        self.assertEqual((self.target/'tools/t.py').read_bytes(),b'keep')
+        self.assertEqual((self.target/'collections/keep.txt').read_bytes(),b'untouched')
+
+    def test_legacy_module_list_matches_package_layout(self):
+        root=Path(deploy_release.__file__).resolve().parent
+        shipped={PurePosixPath(name).name for name in json.loads((root/'release_files.json').read_text(encoding='utf-8'))
+                 if name.startswith('shiguangji/')}
+        self.assertEqual(len(deploy_release.LEGACY_ROOT_MODULES),52)
+        self.assertEqual(set(deploy_release.LEGACY_ROOT_MODULES)-shipped,set())
+        self.assertFalse({path.name for path in root.glob('*.py')}&deploy_release.LEGACY_ROOT_MODULES)

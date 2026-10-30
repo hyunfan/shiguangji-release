@@ -9,12 +9,12 @@ from pathlib import Path
 from unittest.mock import Mock
 from urllib.error import HTTPError
 
-from archive import ArchiveError, Cancelled, Client
-from extractor import blank_post, media_item
-from media_recovery import RecoveryEngine, image_variants, related
-from source_http import SourceError
-from public_sources import discover as public_discover
-from run_budget import RunLimit
+from shiguangji.collect.archive import ArchiveError, Cancelled, Client
+from shiguangji.platforms.extractor import blank_post, media_item
+from shiguangji.media.media_recovery import RecoveryEngine, image_variants, related
+from shiguangji.sources.source_http import SourceError
+from shiguangji.sources.public_sources import discover as public_discover
+from shiguangji.collect.run_budget import RunLimit
 from test_archive import FakeResponse, PNG
 from test_commoncrawl import VIDEO
 

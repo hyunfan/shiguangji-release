@@ -4,17 +4,17 @@ from contextlib import contextmanager
 import json
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from http.server import ThreadingHTTPServer
 import app
-from archive import Collector, make_zip
+from shiguangji.collect.archive import Collector, make_zip
 from test_archive import FixtureClient
 
 class ServerTests(unittest.TestCase):
     def test_storage_settings_require_token_and_never_start_collection(self):
-        from storage_policy import settings,save_settings
+        from shiguangji.storage.storage_policy import settings,save_settings
         old=settings(self.folder)
         try:
             body=json.dumps({'zip_on_demand':False,'cache_gb':1})
@@ -28,7 +28,7 @@ class ServerTests(unittest.TestCase):
         finally:save_settings(self.folder,old)
 
     def test_cloud_configuration_is_authenticated_and_does_not_start_collection(self):
-        from cloud_backup import CloudBackup
+        from shiguangji.storage.cloud_backup import CloudBackup
         service = CloudBackup(self.folder)
         body = json.dumps({'enabled':True,'destination':str(self.folder.parent/'cloud-backup-test')})
         headers = {'X-Local-Token':app.TOKEN,'Content-Type':'application/json'}
@@ -128,6 +128,10 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(status,206);self.assertEqual(data,b'2345')
             self.assertEqual(headers['Content-Type'],'video/mp4')
             self.assertEqual(headers['Content-Range'],'bytes 2-5/10')
+            # The handler releases the read lease right after writing the body, so the
+            # client can finish reading first; wait (bounded) for the release.
+            deadline=time.monotonic()+5
+            while leased and time.monotonic()<deadline:time.sleep(0.01)
             self.assertFalse(leased)
             with patch.object(app,'open_media',side_effect=TimeoutError('cloud read timeout')):
                 self.assertEqual(self.request('/api/cloud-media/alice/media/example.mp4')[0],503)
@@ -212,9 +216,9 @@ class ServerTests(unittest.TestCase):
             path.write_bytes(previous)
 
     def test_collection_identity_is_live_even_when_manifest_was_exported_before_alias_evidence(self):
-        from account_identity import Catalog
-        from archive import Store, export_collection
-        from extractor import blank_post
+        from shiguangji.platforms.account_identity import Catalog
+        from shiguangji.collect.archive import Store, export_collection
+        from shiguangji.platforms.extractor import blank_post
         with tempfile.TemporaryDirectory(dir=self.folder) as temp, patch.object(app.TASKS, 'base',Path(temp)):
             base=Path(temp)
             store=Store(base/'newname','newname')
@@ -269,5 +273,28 @@ class ServerTests(unittest.TestCase):
         finally:
             path.write_bytes(previous)
             make_zip(self.folder/'alice')
+
+    def test_non_ascii_token_is_rejected_with_403(self):
+        body=json.dumps({'username':'alice'})
+        for token in ('\u00e9'*8, app.TOKEN[:-1]+'\u00e9', '\u00ff'):
+            with self.subTest(token=token):
+                status,_,data=self.request('/api/start','POST',{'X-Local-Token':token,'Content-Type':'application/json'},body)
+                self.assertEqual(status,403)
+                self.assertIn('error',json.loads(data))
+        self.assertFalse(app.token_matches('\u00e9'))
+        self.assertFalse(app.token_matches('\ud800'))
+        self.assertFalse(app.token_matches(None))
+        self.assertTrue(app.token_matches(app.TOKEN))
+
+    def test_unexpected_post_error_returns_generic_500_and_logs(self):
+        headers={'X-Local-Token':app.TOKEN,'Content-Type':'application/json'}
+        with patch.object(app,'save_settings',side_effect=RuntimeError('secret internal detail')), \
+                self.assertLogs('shiguangji.app','ERROR') as logged:
+            status,_,data=self.request('/api/reliability','POST',headers,json.dumps({}))
+        self.assertEqual(status,500)
+        payload=json.loads(data)
+        self.assertNotIn('secret internal detail',payload['error'])
+        self.assertIn('secret internal detail','\n'.join(logged.output))
+        self.assertEqual(self.request('/api/state')[0],200)
 
 if __name__=='__main__':unittest.main()

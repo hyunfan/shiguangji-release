@@ -3,20 +3,20 @@ import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from public_sources import discover
-from extractor import blank_post,merge_post
-from recovery_report import report
+from shiguangji.sources.public_sources import discover
+from shiguangji.platforms.extractor import blank_post,merge_post
+from shiguangji.storage.recovery_report import report
 
 
 class PostRecoveryTests(unittest.TestCase):
     def test_media_checks_do_not_refresh_expired_text_lookup(self):
-        from post_recovery import recent_check
+        from shiguangji.collect.post_recovery import recent_check
         from datetime import datetime,timezone
         current=1800000000
         stamp=lambda seconds:datetime.fromtimestamp(seconds,timezone.utc).isoformat()
         p={'public_text_checked_at':stamp(current-86401),
            'source_checks':{'public':{'status':'not_found','checked_at':stamp(current)}}}
-        with patch('post_recovery.time.time',return_value=current):
+        with patch('shiguangji.collect.post_recovery.time.time',return_value=current):
             self.assertFalse(recent_check(p))
             p['public_text_checked_at']=stamp(current-60)
             self.assertTrue(recent_check(p))
@@ -25,15 +25,15 @@ class PostRecoveryTests(unittest.TestCase):
             self.assertFalse(recent_check(p))
 
     def test_more_than_one_batch_keeps_unvisited_text_pending(self):
-        from archive import Collector
-        from post_recovery import recover_posts
-        from collection_export import export_collection
+        from shiguangji.collect.archive import Collector
+        from shiguangji.collect.post_recovery import recover_posts
+        from shiguangji.storage.collection_export import export_collection
         with tempfile.TemporaryDirectory() as d:
             c=Collector('alice',{'multi_source':True},base=Path(d))
             try:
                 for i in range(13):c.store.save_post(blank_post(str(100+i),'alice'))
                 def found(post,*a,**k):post.update(text='verified',text_source='public_metadata');return []
-                with patch('post_recovery.discover',side_effect=found):
+                with patch('shiguangji.collect.post_recovery.discover',side_effect=found):
                     recover_posts(c)
                     result=export_collection(c.store,'partial',[],full=False,run_info=c.run_info)
                     self.assertEqual(result['counts']['text'],12)

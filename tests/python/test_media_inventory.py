@@ -5,9 +5,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from collection_export import publish_manifest
-from collection_reader import _documents, _summaries, fingerprint, read_summary
-from media_inventory import inventory
+from shiguangji.storage.collection_export import publish_manifest
+from shiguangji.storage.collection_reader import _documents, _summaries, fingerprint, read_summary
+from shiguangji.media.media_inventory import inventory
 
 
 def video(asset='123', size='640x360', saved=False, **extra):

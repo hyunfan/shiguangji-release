@@ -3,7 +3,7 @@ import copy
 import json
 import unittest
 
-from extractor import extract
+from shiguangji.platforms.extractor import extract
 
 
 class ApiV2ExtractionTests(unittest.TestCase):

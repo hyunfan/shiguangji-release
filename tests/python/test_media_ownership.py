@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from extractor import extract
+from shiguangji.platforms.extractor import extract
 
 PID = '1346889436626259968'
 OTHER = '1346889436626259999'

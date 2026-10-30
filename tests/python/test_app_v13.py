@@ -10,11 +10,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-import task_service
-from archive import Store, export_collection, make_zip
-from collection_lock import collection_lock
-from extractor import blank_post
-from job_state import read_job, write_job
+from shiguangji.tasks import task_service
+from shiguangji.collect.archive import Store, export_collection, make_zip
+from shiguangji.storage.collection_lock import collection_lock
+from shiguangji.platforms.extractor import blank_post
+from shiguangji.tasks.job_state import read_job, write_job
 
 
 class RestartTests(unittest.TestCase):
@@ -95,7 +95,7 @@ class RestartTests(unittest.TestCase):
         state = self.folder / ".job-state.json"
         write_job(state, app.TASKS.job)
         before = state.read_bytes()
-        with patch('atomic_io.os.replace', side_effect=OSError("simulated file lock")):
+        with patch('shiguangji.core.atomic_io.os.replace', side_effect=OSError("simulated file lock")):
             with self.assertRaises(OSError):
                 write_job(state, {**app.TASKS.job, "status": "failed"})
         self.assertEqual(state.read_bytes(), before)

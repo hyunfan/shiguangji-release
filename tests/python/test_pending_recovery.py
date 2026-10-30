@@ -2,8 +2,8 @@
 import tempfile
 import unittest
 from pathlib import Path
-from archive import Store, export_collection
-from extractor import blank_post, media_item
+from shiguangji.collect.archive import Store, export_collection
+from shiguangji.platforms.extractor import blank_post, media_item
 
 
 class PendingRecoveryTests(unittest.TestCase):

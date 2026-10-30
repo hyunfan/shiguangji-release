@@ -1,16 +1,15 @@
 """Identity discovery fixtures; no real network or user collections."""
 import json
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-from account_identity import search_handles
-from archive import ArchiveError, Cancelled, Client, Collector
-from identity_discovery import discover_aliases, endpoints, profile_pairs, same_endpoint
+from shiguangji.platforms.account_identity import search_handles
+from shiguangji.collect.archive import ArchiveError, Cancelled, Client, Collector
+from shiguangji.collect.identity_discovery import discover_aliases, endpoints, profile_pairs, same_endpoint
 from test_archive import FixtureClient
 
 TS = '20200102030405'
@@ -204,7 +203,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_public_disabled_never_constructs_mirror_transport(self):
         runner = self.runner(); self.anchor(runner)
-        with patch('source_http.SourceClient') as source:
+        with patch('shiguangji.sources.source_http.SourceClient') as source:
             self.finish(runner)
         source.assert_not_called()
 
@@ -257,7 +256,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(manifest['posts'][0]['username'], 'oldalice')
 
     def test_deleting_collection_clears_network_checks_for_fresh_readdition(self):
-        from collection_delete import delete_collection
+        from shiguangji.storage.collection_delete import delete_collection
         runner = self.runner()
         self.finish(runner)
         runner.store.close(); runner.identities.close()
@@ -272,7 +271,7 @@ class DiscoveryTests(unittest.TestCase):
         self.finish(runner)
         row = runner.identities.db.execute("SELECT value FROM settings WHERE key='alias_search:alice'").fetchone()
         state = json.loads(row[0])
-        for name, entry in state['entries'].items():
+        for _name, entry in state['entries'].items():
             if entry['status'] == 'unavailable':
                 entry['at'] = time.time() - 86401
         runner.identities.db.execute("UPDATE settings SET value=? WHERE key='alias_search:alice'", (json.dumps(state),))

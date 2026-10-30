@@ -7,9 +7,9 @@ import unittest
 import zlib
 from email.message import Message
 from pathlib import Path
-from archive import ArchiveError, Client, Collector, Store, decode_page, corrupt_page, media_search_prefix
-from extractor import extract, media_item, blank_post
-from test_archive import FixtureClient, FakeResponse, PID, URL, TS, HTML, IMAGE, PNG
+from shiguangji.collect.archive import ArchiveError, Client, Collector, decode_page, corrupt_page, media_search_prefix
+from shiguangji.platforms.extractor import extract, media_item
+from test_archive import FixtureClient, FakeResponse, URL, TS, HTML, IMAGE, PNG
 
 class RecoveryTests(unittest.TestCase):
     def headers(self, encoding='gzip'):
@@ -50,7 +50,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(Collector('alice',{'mode':'repair'},base=Path(directory),client=client).run(),'complete')
             self.assertEqual(client.page_reads,2)
             self.assertEqual(client.downloads,before_downloads)
-            from compressed_files import read_text
+            from shiguangji.storage.compressed_files import read_text
             self.assertEqual(read_text(raw),HTML)
     def test_successful_page_retry_clears_old_failure(self):
         client=FixtureClient();read=client.text;calls=[]

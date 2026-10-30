@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from archive import ArchiveError, Collector, Store, make_zip, zip_is_current
+from shiguangji.collect.archive import ArchiveError, Collector, Store, make_zip, zip_is_current
 from test_archive import FixtureClient, HTML, IMAGE, TS
 
 

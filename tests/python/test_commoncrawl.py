@@ -6,9 +6,9 @@ import zlib
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
-from commoncrawl_source import (COLLECTIONS_URL, CommonCrawlError, CommonCrawlSource,
+from shiguangji.sources.commoncrawl_source import (COLLECTIONS_URL, CommonCrawlError, CommonCrawlSource,
                                 INDEX_LIMIT, _inflate, _media_valid)
-from extractor import media_item
+from shiguangji.platforms.extractor import media_item
 
 
 IMAGE_URL = "https://pbs.twimg.com/media/Sample?format=jpg&name=large"

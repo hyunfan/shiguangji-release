@@ -2,7 +2,7 @@ import json
 import unittest
 from urllib.error import HTTPError
 
-from public_sources import discover, safe_media, syndication_token
+from shiguangji.sources.public_sources import discover, safe_media, syndication_token
 
 PID = "1467033705218666496"
 IMAGE = "https://pbs.twimg.com/media/test.jpg"

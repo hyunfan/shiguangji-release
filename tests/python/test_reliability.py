@@ -1,5 +1,4 @@
 """Fault injection with isolated fixture libraries; no external archive claims."""
-import io
 import json
 from pathlib import Path
 import sqlite3
@@ -9,14 +8,14 @@ from contextlib import closing
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 
-from archive import Client, Collector
-from core_errors import ArchiveError
-from retry_policy import RetryPolicy, DeferredRequest, TrackedResponse
-from storage_guard import StorageLow, require_space, rotate_log
-from backup_library import backup_collection, restore_backup, digest, sqlite_copy
-from reliability import settings, save_settings, worker_health
-from task_service import TaskService
-from task_status import summary
+from shiguangji.collect.archive import Client, Collector
+from shiguangji.core.core_errors import ArchiveError
+from shiguangji.sources.retry_policy import RetryPolicy, DeferredRequest, TrackedResponse
+from shiguangji.storage.storage_guard import StorageLow, rotate_log
+from shiguangji.storage.backup_library import backup_collection, restore_backup, digest, sqlite_copy
+from shiguangji.system.reliability import settings, save_settings, worker_health
+from shiguangji.tasks.task_service import TaskService
+from shiguangji.tasks.task_status import summary
 from test_archive import FixtureClient, FakeResponse, PNG
 import supervisor
 import launcher
@@ -52,7 +51,7 @@ class ReliabilityTests(unittest.TestCase):
         self.assertTrue(self.policy(force_run='next').allowed('https://pbs.twimg.com/media/a'))
 
     def test_retry_snapshot_uses_effective_host_deadline_after_restart(self):
-        from retry_policy import utc
+        from shiguangji.sources.retry_policy import utc
         policy=self.policy()
         for n in range(3):policy.failure(f'https://web.archive.org/{n}',503)
         self.assertEqual(self.policy().snapshot()['next_retry_at'],utc(self.clock+900))
@@ -64,7 +63,7 @@ class ReliabilityTests(unittest.TestCase):
         self.assertNotIn('https://',self.path.read_text(encoding='utf-8'))
 
     def test_old_retry_records_learn_host_when_checked(self):
-        from retry_policy import utc
+        from shiguangji.sources.retry_policy import utc
         url='https://web.archive.org/old'
         policy=self.policy();policy.failure(url,503)
         policy.data['urls'][policy.key(url)].pop('host',None)
@@ -92,7 +91,7 @@ class ReliabilityTests(unittest.TestCase):
     def test_low_space_stops_before_network_and_preserves_old_file(self):
         client=Client(delay=0);client.open=Mock()
         old=self.base/'old.png';old.write_bytes(PNG)
-        with patch('storage_guard.shutil.disk_usage',return_value=Mock(free=1)):
+        with patch('shiguangji.storage.storage_guard.shutil.disk_usage',return_value=Mock(free=1)):
             with self.assertRaises(StorageLow):client.download('https://pbs.twimg.com/media/a.png',old,0)
         client.open.assert_not_called();self.assertEqual(old.read_bytes(),PNG)
         self.assertFalse(old.with_suffix('.png.part').exists())
@@ -100,7 +99,7 @@ class ReliabilityTests(unittest.TestCase):
     def test_low_space_pauses_queue_without_failing_pending_accounts(self):
         service=TaskService(self.base,collector_for=Mock(),options_for=dict)
         service.task_queue().add(['alice','bob'],{})
-        with patch('task_service.require_space',side_effect=StorageLow('full')),patch.object(service,'start') as start:
+        with patch('shiguangji.tasks.queue_coordinator.require_space',side_effect=StorageLow('full')),patch.object(service,'start') as start:
             service.advance_queue()
         start.assert_not_called();self.assertEqual(service.task_queue().data['reason'],'storage_low')
         self.assertEqual([i['state'] for i in service.task_queue().data['items']],['pending','pending'])
@@ -108,7 +107,7 @@ class ReliabilityTests(unittest.TestCase):
     def test_health_read_does_not_turn_polling_or_logs_into_progress(self):
         service=TaskService(self.base,collector_for=Mock(),options_for=dict)
         service.job.update(running=True,stage='pages');service.activity_clock=service.progress_clock=0
-        with patch('task_service.time.monotonic',return_value=700):
+        with patch('shiguangji.tasks.task_service.time.monotonic',return_value=700):
             service.progress(message='waiting again')
             health=service.health_snapshot();self.assertEqual(health['state'],'slow')
             self.assertEqual(service.health_snapshot()['progress_seconds_ago'],700)
@@ -138,7 +137,7 @@ class ReliabilityTests(unittest.TestCase):
         import os
         Collector('alice',base=self.base,client=FixtureClient()).run()
         destination=self.root/'backups';backup_collection(self.base,'alice',destination)
-        from compressed_files import logical_files, logical_stat, read_bytes
+        from shiguangji.storage.compressed_files import logical_files, logical_stat, read_bytes
         raw=next(logical_files(self.base/'alice/raw'));before=logical_stat(raw);data=read_bytes(raw)
         raw.write_bytes(b'X'+data[1:]);os.utime(raw,ns=(before.st_mtime_ns,before.st_mtime_ns))
         self.assertEqual(backup_collection(self.base,'alice',destination)['copied'],1)
@@ -165,7 +164,7 @@ class ReliabilityTests(unittest.TestCase):
         destination=self.root/'backups'
         def interrupted(source,target):
             Path(target).write_bytes(b'partial');raise OSError('copy interrupted')
-        with patch('backup_library.shutil.copyfile',side_effect=interrupted):
+        with patch('shiguangji.storage.backup_library.shutil.copyfile',side_effect=interrupted):
             with self.assertRaises(OSError):backup_collection(self.base,'alice',destination)
         self.assertFalse(list(destination.rglob('*.part')))
         self.assertTrue((self.base/'alice/archive.sqlite').is_file())
@@ -180,7 +179,7 @@ class ReliabilityTests(unittest.TestCase):
         service=TaskService(self.base,collector_for=Mock(),options_for=dict)
         service.task_queue().add(['alice','bob'],{})
         service.job.update(status='partial',task_summary={'state':'finished','reason':'sources_unavailable'})
-        with patch('backup_library.backup_collection',side_effect=OSError('copy failed')):
+        with patch('shiguangji.storage.backup_library.backup_collection',side_effect=OSError('copy failed')):
             service.backup_result('alice')
         self.assertEqual(service.job['status'],'partial')
         self.assertEqual(service.job['backup']['state'],'failed')

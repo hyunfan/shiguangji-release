@@ -7,11 +7,11 @@ from unittest.mock import Mock, patch
 from urllib.error import URLError
 
 import app
-from archive import Client, Collector, Store, replay
-from extractor import blank_post, media_item
-from media_recovery import RecoveryEngine
-from run_budget import RunBudget, RunLimit
-from source_http import SourceClient
+from shiguangji.collect.archive import Client, Collector, Store, replay
+from shiguangji.platforms.extractor import blank_post, media_item
+from shiguangji.media.media_recovery import RecoveryEngine
+from shiguangji.collect.run_budget import RunBudget, RunLimit
+from shiguangji.sources.source_http import SourceClient
 from test_source_http import Response, IMAGE
 from test_archive import PNG, TS
 

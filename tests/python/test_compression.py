@@ -1,8 +1,6 @@
 """Storage-format regressions: interruption, legacy indexes and real round trips."""
-import gzip
 import hashlib
 import json
-import os
 from pathlib import Path
 import tempfile
 import threading
@@ -11,13 +9,13 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-import compressed_files as stored
-from archive import Collector
-from backup_library import backup_collection, restore_backup
-from cloud_backup import make_bundle
-from collection_export import make_zip
-from compact_library import compact_library
-from storage_policy import reproducible
+from shiguangji.storage import compressed_files as stored
+from shiguangji.collect.archive import Collector
+from shiguangji.storage.backup_library import backup_collection, restore_backup
+from shiguangji.storage.cloud_backup import make_bundle
+from shiguangji.storage.collection_export import make_zip
+from shiguangji.storage.compact_library import compact_library
+from shiguangji.storage.storage_policy import reproducible
 from test_archive import FixtureClient
 
 
@@ -44,7 +42,7 @@ class CompressionTests(unittest.TestCase):
 
     def test_failed_verification_never_removes_original(self):
         path=self.root/'a.txt';data=b'hello'*10000;path.write_bytes(data)
-        with patch('compressed_files._check_gzip',side_effect=ValueError('bad readback')):
+        with patch('shiguangji.storage.compressed_files._check_gzip',side_effect=ValueError('bad readback')):
             with self.assertRaises(ValueError):stored.compress_file(path,self.root)
         self.assertEqual(path.read_bytes(),data)
         self.assertFalse(stored.packed_path(path).exists())
@@ -76,7 +74,7 @@ class CompressionTests(unittest.TestCase):
         with self.assertRaises((OSError,EOFError,ValueError)):stored.compress_file(path,self.root)
 
     def test_parallel_work_is_bounded_and_pause_drains_before_releasing_lock(self):
-        from collection_lock import collection_lock, CollectionBusy
+        from shiguangji.storage.collection_lock import collection_lock, CollectionBusy
         base=self.root/'collections';folder=base/'alice';raw=folder/'raw';raw.mkdir(parents=True)
         (folder/'manifest.json').write_text('{}')
         for n in range(50):(raw/(str(n)+'.txt')).write_bytes(b'text'*10000)
@@ -96,7 +94,7 @@ class CompressionTests(unittest.TestCase):
                 return item
             finally:
                 with mutex:active-=1
-        with patch('compact_library.compress_file',side_effect=work):result=compact_library(base,stop=stop)
+        with patch('shiguangji.storage.compact_library.compress_file',side_effect=work):result=compact_library(base,stop=stop)
         self.assertTrue(result['paused']);self.assertFalse(result['errors'])
         self.assertGreater(peak,1);self.assertLessEqual(peak,8);self.assertEqual(active,0)
         self.assertLess(result['checked'],50)

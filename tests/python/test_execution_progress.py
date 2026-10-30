@@ -6,9 +6,9 @@ import unittest
 import zipfile
 from unittest.mock import patch
 
-from archive import ArchiveError, Collector
-from instagram_archive import InstagramCollector
-from task_service import TaskService
+from shiguangji.collect.archive import ArchiveError, Collector
+from shiguangji.collect.instagram_archive import InstagramCollector
+from shiguangji.tasks.task_service import TaskService
 from test_archive import FixtureClient, TS, URL
 from test_instagram import FakeArchive
 
@@ -99,17 +99,17 @@ class ExecutionProgressTests(unittest.TestCase):
         service = TaskService(self.base, collector_for=lambda _: Collector, options_for=dict)
         service.job.update(running=True, stage='pages', page_progress={'parsed':2, 'total':3})
         service.stage_clock = 100
-        with patch('task_service.time.monotonic', return_value=112):
+        with patch('shiguangji.tasks.task_service.time.monotonic', return_value=112):
             service.progress(stage='media')
         self.assertEqual(service.job['stage_seconds'], {'pages':12})
         self.assertEqual(service.job['page_progress'], {})
-        with patch('task_service.time.monotonic', return_value=119):
+        with patch('shiguangji.tasks.task_service.time.monotonic', return_value=119):
             service.progress(stage='pages')
-        with patch('task_service.time.monotonic', return_value=122):
+        with patch('shiguangji.tasks.task_service.time.monotonic', return_value=122):
             service.progress(stage='done')
         self.assertEqual(service.job['stage_seconds'], {'pages':15, 'media':7})
         service.job['running'] = False
-        with patch('task_service.threading.Thread'):
+        with patch('shiguangji.tasks.task_service.threading.Thread'):
             service.start('bob', {})
         self.assertEqual(service.job['stage_seconds'], {})
         self.assertEqual(service.job['page_progress'], {})

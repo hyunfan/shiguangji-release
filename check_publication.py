@@ -13,7 +13,7 @@ import sys
 import tempfile
 import zipfile
 
-from app_version import VERSION
+from shiguangji.core.app_version import VERSION
 from audit_publication import findings, scan
 from build_portable import read_runtime
 

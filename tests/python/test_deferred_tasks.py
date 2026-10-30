@@ -4,10 +4,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from datetime import datetime, timezone
-from auto_batches import AutoBatches
-from task_queue import TaskQueue
-from task_status import summary
-from task_service import TaskService
+from shiguangji.tasks.auto_batches import AutoBatches
+from shiguangji.tasks.task_queue import TaskQueue
+from shiguangji.tasks.task_status import summary
+from shiguangji.tasks.task_service import TaskService
 
 
 def outcome(at):
@@ -18,9 +18,9 @@ def outcome(at):
 class DeferredTests(unittest.TestCase):
     def test_retry_limit_survives_export_history_and_stale_cooldown(self):
         import json
-        from archive import Collector
+        from shiguangji.collect.archive import Collector
         from test_archive import FixtureClient
-        with tempfile.TemporaryDirectory() as d, patch('task_service.threading.Thread'), patch('task_service.require_space'):
+        with tempfile.TemporaryDirectory() as d, patch('shiguangji.tasks.task_service.threading.Thread'), patch('shiguangji.tasks.task_service.require_space'):
             base=Path(d)
             Collector('alice',base=base,client=FixtureClient()).run()
             initial=json.loads((base/'alice/manifest.json').read_text(encoding='utf-8'))['counts']
@@ -74,13 +74,13 @@ class DeferredTests(unittest.TestCase):
             self.assertFalse(q.defer_manual('alice',{'auto_continue':True},result))
 
     def test_expired_deadline_still_arms_scheduler(self):
-        with tempfile.TemporaryDirectory() as d,patch('task_queue.time.time',return_value=1000) as clock:
+        with tempfile.TemporaryDirectory() as d,patch('shiguangji.tasks.task_queue.time.time',return_value=1000) as clock:
             q=TaskQueue(Path(d)/'q.json');q.defer_manual('alice',{},outcome(1100))
             clock.return_value=1200
             self.assertTrue(q.next_retry());self.assertEqual(q.next_item()['username'],'alice')
 
     def test_service_timer_wakes_due_account_and_respects_pause(self):
-        with tempfile.TemporaryDirectory() as d, patch('task_queue.time.time',return_value=1000) as clock, patch('task_service.threading.Timer') as timer, patch('task_service.threading.Thread'):
+        with tempfile.TemporaryDirectory() as d, patch('shiguangji.tasks.task_queue.time.time',return_value=1000) as clock, patch('shiguangji.tasks.task_service.threading.Timer') as timer, patch('shiguangji.tasks.task_service.threading.Thread'):
             service=TaskService(Path(d),collector_for=lambda *a:None,options_for=dict)
             q=service.task_queue();q.defer_manual('alice',{'mode':'repair'},outcome(1900))
             service.advance_queue()
@@ -103,7 +103,7 @@ class DeferredTests(unittest.TestCase):
         self.assertEqual(result['next_retry_at'],due)
 
     def test_deferred_account_yields_then_retries_and_stops_at_limit(self):
-        with tempfile.TemporaryDirectory() as d, patch('task_queue.time.time',return_value=1000) as clock:
+        with tempfile.TemporaryDirectory() as d, patch('shiguangji.tasks.task_queue.time.time',return_value=1000) as clock:
             q=TaskQueue(Path(d)/'q.json');q.add(['alice','bob'],{})
             alice=q.next_item();q.mark_running(alice['id'],'alice','a')
             q.finish(alice['id'],'a',outcome(1900))
@@ -123,7 +123,7 @@ class DeferredTests(unittest.TestCase):
             self.assertFalse(q.data['items'][0]['outcome']['automatic_retry'])
 
     def test_retry_age_limit_ends_instead_of_promising_a_future_run(self):
-        with tempfile.TemporaryDirectory() as d,patch('task_queue.time.time',return_value=1000):
+        with tempfile.TemporaryDirectory() as d,patch('shiguangji.tasks.task_queue.time.time',return_value=1000):
             q=TaskQueue(Path(d)/'q.json');q.add(['alice'],{})
             item=q.next_item();q.mark_running(item['id'],'alice','a')
             q.finish(item['id'],'a',outcome(1000+49*3600))

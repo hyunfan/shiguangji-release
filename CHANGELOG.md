@@ -1,5 +1,23 @@
 # 更新记录
 
+## 未发布
+
+- 代码结构：根目录平铺的 52 个应用模块按职责移入 `shiguangji/` 包（core、platforms、collect、sources、media、storage、tasks、system）；入口脚本、`.cmd` 启动方式、数据目录与界面行为不变。
+- 全库备份命令改为 `shiguangji\storage\backup_library.py`；无损压缩回退命令改为 `shiguangji/storage/compact_library.py`。
+- 发布白名单、便携包导入检查同步覆盖新包；新增包结构守护测试。
+- 本地服务：令牌含非 ASCII 字符时返回 403，不再断开连接；POST 处理增加兜底，未预期错误返回通用 500 并写入日志。
+- 升级：`deploy_release.py` 按上一版 `release.json`（老安装按旧模块名单）备份并删除新版不再包含的程序文件，避免从 1.28.2 升级后根目录残留旧模块；失败时自动恢复，用户数据与运行环境不在清理范围内。
+- 依赖方向：`original_url` 下沉到 `shiguangji/core/archive_urls.py`（`platforms.extractor` 继续导出），`core` 不再依赖 `platforms`；`identity_discovery`、`local_aliases` 移入 `collect`，`recovery_report` 移入 `storage`；新增基于 `ast` 的依赖方向守护测试，暂不修复的 3 处已知违规列入只减不增的名单。
+- 本地服务：`app.py` 的请求处理拆入 `shiguangji/web/`，GET/POST 改用路由表；“合集是否正在采集”的判断收敛为 `TaskService.collection_active`。`app.py` 仍是入口，启动方式、接口、令牌与来源校验不变。
+- 任务服务：`TaskService` 按职责拆为 `QueueCoordinator`（队列与历史）、`BatchRunner`（自动多批循环）、`ResultFinalizer`（结果解读与导出），`TaskService` 保留为门面，公开方法不变。
+- 长函数：`extractor.extract` 按解析来源拆为固定链接、HTML 容器、JSON、页面元数据等步骤；`reuse_local_aliases` 拆出源合集读取、快照解析、媒体复用与原始快照保存；解析结果与复用行为不变。
+- 公共函数：重复的 `read_json` / `write_json` 合并到 `shiguangji/core/atomic_io.py`，任务队列改用 `core` 的 `now`；合集文件仍为缩进格式，控制文件仍为紧凑格式。
+- 网络客户端：Wayback 与公开来源客户端相同的停止/预算检查合并为 `shiguangji/sources/cancellation.py` 的 `CancellableClient`。
+- 静态检查：新增 `ruff.toml`，只启用 F（pyflakes）与 B（bugbear）规则，GitHub Actions 新增 ruff 检查任务；清理未使用的导入与变量，对兼容转出、循环内同步调用的闭包和有意保留的异常链做了说明或按文件豁免。ruff 只是开发检查工具，不是运行依赖。
+- 长函数（续）：`hls_recovery.recover` 拆为分片缓存（`_SegmentCache`）、播放列表选择、分轨写入与合并发布；`Collector.download_media` 拆出单项下载、索引变体查找与失败记录；`identity_discovery.discover_aliases` 改由 `_AliasSearch` 管理状态、任务与收尾；`public_sources.discover` 拆出元数据读取、来源解析、身份核对、正文补取与媒体合并。拆分前先补特征测试，行为不变。
+- 前端：`static/app.js` 的约 40 个闭包状态变量收进一个 `state` 对象，按面板拆为 `app-core.js`（状态、格式化与 API）、`app-job.js`（任务与队列）、`app-collection.js`（合集、历史用户名与删除）和 `app.js`（轮询、表单与设置），仍是 IIFE + 全局对象，不引入框架或 ES Modules；超长行拆开（最长 831 → 165 个字符，剩余为单个文本模板）。离线合集页不受影响。
+- 测试：为 `storage/storage_service.py`、`supervisor.py`、`launcher.py` 补行为测试（`test_storage_service.py`、`test_supervisor.py`、`test_launcher_background.py`），覆盖空间任务的预览/释放/暂停/失败与网盘试读、守护的重启退避与停止、后台启动/停止与锁竞争；覆盖率分别 22% → 98%、53% → 78%、72% → 91%，剩余主要是 Windows 专属分支（相应用例在 Linux 上跳过）。
+
 ## 1.28.2 · 2026-10-18
 
 - 发布隐私扫描覆盖 YAML、TOML、INI、Shell 和示例环境配置；带凭据网址的测试豁免收紧到指定文件中的完整虚构网址，新增漏检回归检查。

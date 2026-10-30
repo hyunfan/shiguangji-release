@@ -6,8 +6,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
-from archive import Client, Collector, Store, INDEX_POLICY_VERSION
-from test_archive import FixtureClient, HTML, PID, TS, URL
+from shiguangji.collect.archive import Client, Collector, Store, INDEX_POLICY_VERSION
+from test_archive import FixtureClient, TS, URL
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class DiscoveryTests(unittest.TestCase):
             yield [dict(timestamp=TS, original=URL, mimetype='application/json', statuscode='-', digest='D'),
                    dict(timestamp=TS, original=URL.replace('/alice/', '/alicea/'), mimetype='application/json', statuscode='-', digest='N')]
         client.cdx = cdx
-        with tempfile.TemporaryDirectory() as folder, patch('media_recovery.RecoveryEngine.run') as rescue:
+        with tempfile.TemporaryDirectory() as folder, patch('shiguangji.media.media_recovery.RecoveryEngine.run') as rescue:
             runner = Collector('alice', {'mode': 'discover', 'multi_source': True}, base=Path(folder), client=client)
             self.assertEqual(runner.run(), 'partial')
             manifest = json.loads((Path(folder)/'alice/manifest.json').read_text(encoding='utf-8'))

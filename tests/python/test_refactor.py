@@ -7,19 +7,19 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from archive_http import Client
-from source_http import SourceClient
-from core_errors import ArchiveError, failure_kind
-from media_files import media_valid, saved_file_valid
+from shiguangji.sources.archive_http import Client
+from shiguangji.sources.source_http import SourceClient
+from shiguangji.core.core_errors import ArchiveError, failure_kind
+from shiguangji.media.media_files import media_valid, saved_file_valid
 from test_archive import FakeResponse, IMAGE
-from test_media_fixtures import PNG, VIDEO, FRAGMENTED, WEBM, png, box
-from task_queue import TaskQueue
-from job_dispatch import dispatch
-from task_status import summary
-from collection_reader import read_summary, read_document, post_page, _summaries, _documents
-from collection_export import publish_manifest
-from search_plan import indexes_plan, update_progress
-from platform_registry import Account, platform_for
+from test_media_fixtures import PNG, VIDEO, FRAGMENTED, WEBM, box
+from shiguangji.tasks.task_queue import TaskQueue
+from shiguangji.tasks.job_dispatch import dispatch
+from shiguangji.tasks.task_status import summary
+from shiguangji.storage.collection_reader import read_summary, post_page, _summaries, _documents
+from shiguangji.storage.collection_export import publish_manifest
+from shiguangji.sources.search_plan import indexes_plan, update_progress
+from shiguangji.platforms.platform_registry import Account, platform_for
 
 
 class RefactorTests(unittest.TestCase):
@@ -133,9 +133,9 @@ class RefactorTests(unittest.TestCase):
         self.assertEqual(read_summary(self.folder)['counts']['posts'],3)
 
     def test_zip_generation_hashes_agree_with_packaged_files(self):
-        from collection_export import make_zip
+        from shiguangji.storage.collection_export import make_zip
         from test_archive import FixtureClient
-        from archive import Collector
+        from shiguangji.collect.archive import Collector
         import zipfile
         Collector('alice',base=self.folder,client=FixtureClient()).run()
         with zipfile.ZipFile(make_zip(self.folder/'alice')) as package:

@@ -3,18 +3,17 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
-import time
 import unittest
 from unittest.mock import Mock, patch
 
-from archive import Collector, make_zip
+from shiguangji.collect.archive import Collector, make_zip
 from test_archive import FixtureClient
-from backup_library import backup_collection, restore_backup
-import cloud_backup
-import cloud_media
-from storage_policy import settings, save_settings, plan_cleanup, execute_cleanup
-from storage_service import StorageService
-from task_service import TaskService
+from shiguangji.storage.backup_library import backup_collection, restore_backup
+from shiguangji.storage import cloud_backup
+from shiguangji.storage import cloud_media
+from shiguangji.storage.storage_policy import settings, save_settings, plan_cleanup, execute_cleanup
+from shiguangji.storage.storage_service import StorageService
+from shiguangji.tasks.task_service import TaskService
 
 
 class SpaceTests(unittest.TestCase):
@@ -78,7 +77,7 @@ class SpaceTests(unittest.TestCase):
     def test_regular_task_skips_zip_but_explicit_export_still_builds_it(self):
         service=TaskService(self.base,collector_for=Mock(),options_for=dict)
         service.job.update(username='alice',running=True,run_id='test')
-        with patch.object(service,'collect_batches',return_value='partial'),patch('task_service.make_zip') as build:
+        with patch.object(service,'collect_batches',return_value='partial'),patch('shiguangji.tasks.task_service.make_zip') as build:
             service._worker_body('alice',{})
             build.assert_not_called()
             service._worker_body('alice',{},zip_only=True)

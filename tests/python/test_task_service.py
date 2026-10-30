@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from task_service import TaskService
+from shiguangji.tasks.task_service import TaskService
 
 
 class TaskServiceTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class TaskServiceTests(unittest.TestCase):
 
     def test_old_progress_and_worker_cannot_change_a_new_run(self):
         service = self.service
-        with patch('task_service.threading.Thread'):
+        with patch('shiguangji.tasks.task_service.threading.Thread'):
             service.start('alice', {})
             old_id = service.job['run_id']
             old_report = service.progress_callback(old_id)
@@ -52,18 +52,18 @@ class TaskServiceTests(unittest.TestCase):
         self.assertEqual(self.service.job, before)
 
     def test_thread_start_failure_can_be_retried_without_stuck_running_state(self):
-        with patch('task_service.threading.Thread', side_effect=RuntimeError('cannot start')):
+        with patch('shiguangji.tasks.task_service.threading.Thread', side_effect=RuntimeError('cannot start')):
             with self.assertRaises(RuntimeError):
                 self.service.start('alice', {})
         self.assertFalse(self.service.job['running'])
         self.assertEqual(self.service.job['sleep_prevention'], 'off')
-        with patch('task_service.threading.Thread') as thread:
+        with patch('shiguangji.tasks.task_service.threading.Thread') as thread:
             self.service.start('bob', {})
             thread.return_value.start.assert_called_once()
         self.assertTrue(self.service.job['running'])
 
     def test_restore_of_running_checkpoint_does_not_restart_collection(self):
-        with patch('task_service.threading.Thread'):
+        with patch('shiguangji.tasks.task_service.threading.Thread'):
             self.service.start('alice', {})
         restored = TaskService(self.base, collector_for=self.factory, options_for=dict)
         restored.restore_job()

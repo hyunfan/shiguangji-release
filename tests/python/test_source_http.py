@@ -13,8 +13,8 @@ from unittest.mock import Mock
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
 
-from archive import ArchiveError, Cancelled
-from source_http import SourceClient, SourceError, SourceRedirect, validate_source_url
+from shiguangji.collect.archive import ArchiveError, Cancelled
+from shiguangji.sources.source_http import SourceClient, SourceError, SourceRedirect, validate_source_url
 
 
 IMAGE = "https://pbs.twimg.com/media/fixture.jpg"
@@ -113,7 +113,7 @@ class SourceClientTests(unittest.TestCase):
         self.assertNotIn("Authorization", request.headers)
 
     def test_public_discovery_integrates_with_anonymous_transport(self):
-        from public_sources import discover
+        from shiguangji.sources.public_sources import discover
         client = self.client()
         def respond(request, timeout):
             body = json.dumps({"id_str": "123", "user": {"screen_name": "alice"}, "photos": [{"url": IMAGE}]}).encode()
@@ -126,7 +126,7 @@ class SourceClientTests(unittest.TestCase):
         self.assertEqual(post["source_checks"]["syndication"]["status"], "found")
 
     def test_public_discovery_preserves_transport_http_status(self):
-        from public_sources import discover
+        from shiguangji.sources.public_sources import discover
         client = self.client()
         client.opener.open.side_effect = HTTPError(API, 404, "Not found", Message(), io.BytesIO())
         post = {"id": "123", "username": "alice"}

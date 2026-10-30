@@ -10,11 +10,11 @@ import unittest
 from unittest.mock import patch
 
 import app
-import task_service
-from archive import Store, export_collection, make_zip, zip_is_current
-from extractor import blank_post
-from task_queue import TaskQueue, parse_handles
-from task_status import summary
+from shiguangji.tasks import task_service
+from shiguangji.collect.archive import Store, export_collection, make_zip, zip_is_current
+from shiguangji.platforms.extractor import blank_post
+from shiguangji.tasks.task_queue import TaskQueue, parse_handles
+from shiguangji.tasks.task_status import summary
 
 
 class QueueStorageTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class QueueStorageTests(unittest.TestCase):
         self.assertIsNone(self.queue.next_item())
 
     def test_write_failure_does_not_report_items_as_saved(self):
-        with patch('task_queue.atomic_write_text',side_effect=OSError('disk full')):
+        with patch('shiguangji.tasks.task_queue.atomic_write_text',side_effect=OSError('disk full')):
             with self.assertRaises(OSError): self.queue.add(['alice'],{})
         self.assertEqual(self.queue.data['items'],[])
 
@@ -86,7 +86,7 @@ class QueueStorageTests(unittest.TestCase):
 class QueueIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.base=Path(self.temp.name).resolve()/'collections';self.base.mkdir()
-        from storage_policy import save_settings
+        from shiguangji.storage.storage_policy import save_settings
         save_settings(self.base,{'zip_on_demand':False})  # Existing ZIP-before-next tests cover this optional mode.
         self.patches=[patch.object(app.TASKS, 'base',self.base),patch.object(app.TASKS, 'queue',None),
                       patch.object(app.TASKS, 'stop',threading.Event()),patch.object(app.TASKS, 'stopping',threading.Event()),
@@ -160,7 +160,7 @@ class QueueIntegrationTests(unittest.TestCase):
         self.assertTrue(all(i['state']=='finished' for i in app.TASKS.task_queue().data['items']))
 
     def test_on_demand_queue_finishes_without_zip_and_keeps_offline_pages(self):
-        from storage_policy import save_settings
+        from shiguangji.storage.storage_policy import save_settings
         save_settings(self.base,{'zip_on_demand':True})
         with patch.object(task_service,'make_zip') as build:
             self.add();self.wait(lambda:app.TASKS.task_queue().data['state']=='finished')
@@ -247,7 +247,7 @@ class QueueIntegrationTests(unittest.TestCase):
         self.assertEqual([h for h,_ in self.started],['alice','bob','charlie'])
 
     def test_storage_failure_returns_error_without_starting_network_work(self):
-        with patch('task_queue.atomic_write_text',side_effect=OSError('disk full')):
+        with patch('shiguangji.tasks.task_queue.atomic_write_text',side_effect=OSError('disk full')):
             status,result=self.request('/api/queue/add',{'usernames':'alice bob'})
         self.assertEqual(status,503);self.assertIn('无法保存',result['error'])
         self.assertEqual(self.started,[]);self.assertEqual(app.TASKS.task_queue().data['items'],[])
