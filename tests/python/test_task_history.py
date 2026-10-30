@@ -155,14 +155,14 @@ class HistoryTests(unittest.TestCase):
 
     def test_queue_prepare_failure_is_recorded_even_after_history_was_opened(self):
         queue=self.service.task_queue();queue.add(['alice'],{})
-        with patch('shiguangji.tasks.task_service.canonical_handle',side_effect=ValueError('conflict')):
+        with patch('shiguangji.tasks.queue_coordinator.canonical_handle',side_effect=ValueError('conflict')):
             self.service.advance_queue()
         self.assertEqual(self.history.search({'state':'failed'})['total'],1)
 
     def test_identity_read_failure_does_not_lose_outcome_or_known_aliases(self):
         job = self.add()
         self.service.job.update(job, status='failed', running=False)
-        with patch('shiguangji.tasks.task_service.platform_for') as platform:
+        with patch('shiguangji.tasks.queue_coordinator.platform_for') as platform:
             platform.return_value.identity.side_effect = OSError('temporarily unavailable')
             self.service.save_history_result()
         item = self.history.search({'q':'oldalice'})['items'][0]

@@ -4,36 +4,36 @@ from pathlib import Path
 import threading
 import time
 import uuid
-from shiguangji.core.archive_support import HOSTS, now
-from shiguangji.storage.collection_store import Store
-from shiguangji.storage.collection_export import export_collection, publish_manifest, make_zip
+from shiguangji.core.archive_support import now
+from shiguangji.storage.collection_export import publish_manifest, make_zip
 from shiguangji.storage.collection_lock import CollectionBusy, collection_lock, collection_is_busy
-from shiguangji.platforms.platform_accounts import collection_key as username, is_instagram
-from shiguangji.platforms.platform_registry import platform_for
+from shiguangji.platforms.platform_accounts import collection_key as username
 from shiguangji.tasks.job_state import read_job, write_job
-from shiguangji.tasks.auto_batches import AutoBatches, AUTO_REST_SECONDS
 from shiguangji.system.power_guard import prevent_idle_sleep
-from shiguangji.tasks.task_status import summary as task_summary, collection_summary, REASONS
-from shiguangji.tasks.task_queue import TaskQueue, retry_epoch
-from shiguangji.tasks.task_history import TaskHistory
+from shiguangji.tasks.task_status import summary as task_summary
 from shiguangji.storage.storage_guard import StorageLow, require_space
 from shiguangji.system.reliability import settings, worker_health
 from shiguangji.storage.storage_policy import settings as storage_settings
+from shiguangji.tasks.batch_runner import BatchRunner
+from shiguangji.tasks.queue_coordinator import QueueCoordinator, canonical_handle
+from shiguangji.tasks.result_finalizer import ResultFinalizer
+
+__all__ = ['TaskService', 'SLEEP_MESSAGES', 'canonical_handle']
 
 SLEEP_MESSAGES = {'active': '任务防休眠已启用，屏幕可正常熄灭；任务结束后恢复正常休眠规则。',
                   'failed': 'Windows 防休眠状态设置失败，请接通电源并检查系统休眠设置；任务仍会继续。'}
 
 
-def canonical_handle(base, handle):
-    return platform_for(handle).canonical(base,handle)
-
-
-class TaskService:
+class TaskService(QueueCoordinator, BatchRunner, ResultFinalizer):
     """One isolated service per library; dependencies are supplied by the entrypoint.
 
     The job dictionary retains the public API/checkpoint schema. Its lock protects
     lifecycle transitions; the collection lock protects disk writes. A queue task
     may start only after the previous worker has released its sleep guard.
+
+    TaskService is the facade: queue/history coordination, the automatic batch loop and
+    result finalization live in mixins in sibling modules, and every method remains
+    available (and patchable) on the service instance.
     """
     def __init__(self, base, *, collector_for, options_for):
         self.base = Path(base)
@@ -52,46 +52,9 @@ class TaskService:
         self.activity_clock = self.progress_clock = self.stage_clock
         self.retry_timer = None
 
-    def schedule_queue_retry(self):
-        if self.retry_timer:
-            self.retry_timer.cancel()
-            self.retry_timer = None
-        due = self.task_queue().next_retry()
-        if self.stopping.is_set() or self.job.get('running') or self.task_queue().data['state'] != 'running' or not due:
-            return
-        def wake():
-            with self.lock:
-                self.retry_timer = None
-                if not self.stopping.is_set():
-                    try:
-                        self.advance_queue()
-                    except Exception as error:
-                        self.task_queue().pause('retry_error')
-                        self.progress(message='自动重试启动失败，队列已暂停：'+str(error)[:200])
-        self.retry_timer = threading.Timer(max(1, min(60, retry_epoch(due)-time.time())), wake)
-        self.retry_timer.daemon = True
-        self.retry_timer.start()
-
     def health_snapshot(self):
         with self.lock:
             return worker_health(self.job, time.monotonic(), self.activity_clock, self.progress_clock)
-
-    def recover_queue(self, run_id):
-        """Only a supervisor-confirmed crash can opt in to resuming this exact run."""
-        if not run_id or not settings(self.base)['resume_queue_after_crash']:
-            return False
-        with self.lock:
-            try:
-                raw = json.loads((self.base/'.task-queue.json').read_text(encoding='utf-8'))
-            except (OSError, ValueError):
-                return False
-            if (self.job.get('running') or not self.job.get('interrupted') or self.job.get('run_id') != run_id
-                    or raw.get('state') != 'running' or any(i.get('state') == 'paused' for i in raw.get('items', []))
-                    or not any(i.get('state') == 'running' and i.get('run_id') == run_id for i in raw.get('items', []))):
-                return False
-            self.task_queue().resume()
-            self.advance_queue()
-            return bool(self.job.get('running'))
 
     def sleep_status(self, state):
         updates = {'sleep_prevention': state}
@@ -122,98 +85,6 @@ class TaskService:
         ``key`` is the on-disk collection key when it differs from the job's username.
         """
         return (self.job['running'] and self.job['username'] == handle) or self.collection_busy(key or handle)
-
-    def task_queue(self):
-        path = self.base / '.task-queue.json'
-        if self.queue is None or self.queue.path != path:
-            self.queue = TaskQueue(path)
-        return self.queue
-
-    def task_history(self):
-        if self.history is None or self.history.base != self.base:
-            history = TaskHistory(self.base)
-            history.bootstrap(self.task_queue(), self.job.get('run_id', '') if self.job.get('running') else '')
-            self.history = history
-        return self.history
-
-    def history_result(self, params):
-        with self.lock:
-            result = self.task_history().search(params)
-            for item in result['items']:
-                corrected = self.reconcile_summary({**item, 'run_id':item['id']})
-                if corrected.get('reason') != item.get('reason'):
-                    item.update(reason=corrected['reason'], message=corrected['reason_text'])
-            return result
-
-    def reconcile_summary(self, outcome):
-        with self.lock:
-            return self.task_queue().reconcile(outcome)
-
-    def retry_history(self, item_id, current_options):
-        """Retry just this account, preserving a paused queue's other entries."""
-        with self.lock:
-            if self.stopping.is_set() or self.job.get('running'):
-                raise ValueError('请先等待当前任务完成或暂停保存，再继续历史任务。')
-            item = self.task_history().get(item_id)
-            handle = item['username']
-            if self.collection_busy(handle):
-                raise CollectionBusy('该合集正在被其他进程使用，请稍后重试。')
-            if item['state'] == 'running':
-                raise ValueError('该任务仍在运行，请刷新记录后重试。')
-            # Recorded runs have complete options. Older evidence does not;
-            # preserve its known mode but use current settings for unknown keys.
-            options = self.options_for({**current_options, **item['options'],
-                                        'mode':'full' if item['mode'] == 'zip' else item['mode'],
-                                        'proxy':current_options.get('proxy', '')})
-            folder = self.base / handle
-            exists = (folder / 'manifest.json').is_file()
-            zip_only = item['mode'] == 'zip' or item.get('reason') == 'zip_failed'
-            if zip_only and not exists:
-                raise ValueError('合集已不存在，无法重新打包；请重新添加博主。')
-            if not exists and options['mode'] in {'repair', 'rescue', 'identity'}:
-                raise ValueError('合集已不存在，请重新添加博主进行完整查找。')
-            queued = next((i for i in self.task_queue().data['items']
-                           if i['username'] == handle and i['state'] in {'pending', 'paused', 'running'}), None)
-            if queued and queued['state'] == 'running':
-                raise ValueError('该博主仍在运行队列中，请先暂停队列并等待保存。')
-            # A narrow retry must not consume a queued full archive for the same account.
-            queue_id = queued['id'] if queued and not zip_only and options['mode'] == 'full' else None
-            self.start(handle, options, zip_only=zip_only, queue_id=queue_id)
-            return {'username':handle, 'run_id':self.job['run_id']}
-
-    def save_history_result(self):
-        identity = None
-        try:
-            if self.job.get('username'):
-                identity = platform_for(self.job['username']).identity(self.base, self.job['username'])
-        except (OSError, ValueError):
-            # Identity metadata must not prevent recording a task's outcome.
-            pass
-        try:
-            self.task_history().finish(self.job, identity)
-        except (OSError, ValueError) as error:
-            self.progress(message='任务结果已保留，但历史记录暂未保存：' + str(error)[:200])
-
-    def advance_queue(self):
-        """Called under self.lock, after the previous worker released its sleep guard."""
-        from shiguangji.tasks.job_dispatch import dispatch
-        if self.task_queue().data.get('state') == 'running' and not self.job.get('running'):
-            try:
-                require_space(self.base)
-            except StorageLow as error:
-                self.task_queue().pause('storage_low')
-                self.progress(message=str(error))
-                return
-        def prepare(item):
-            try:
-                return (canonical_handle(self.base, item['username']),
-                        self.options_for({**item['options'], 'auto_continue':True}))
-            except Exception as error:
-                self.task_history().failed_start(item, str(error))
-                raise
-        dispatch(self.task_queue(), prepare, self.start,
-                 lambda: not self.job.get('running') and not self.stopping.is_set())
-        self.schedule_queue_retry()
 
     def restore_job(self):
         """Recover the last result; a restart never starts collection or a download."""
@@ -304,14 +175,6 @@ class TaskService:
                 self.progress(pause_requested=True, message='正在暂停，当前网络请求结束后保存进度。')
             return True
 
-    def pause_queue(self):
-        with self.lock:
-            queue = self.task_queue()
-            queue.pause()
-            if self.job.get('running') and any(i['state'] == 'running' and i.get('run_id') == self.job.get('run_id') for i in queue.data['items']):
-                self.stop.set()
-                self.progress(pause_requested=True, message='正在暂停队列，当前账号保存完成后停止。')
-
     def refresh_external_job(self):
         """An observed CLI/second-window task can finish while this UI remains open."""
         with self.lock:
@@ -350,193 +213,6 @@ class TaskService:
                      run_id=manifest.get('run_id', '') if 'manifest' in locals() else '',
                      interrupted=interrupted, message="另一进程已结束；未完成部分可点击继续整理。" if interrupted
                      else "另一进程已结束处理，可刷新合集查看最新结果。")
-
-    def export_summary(self, manifest):
-        """Retrying publication must restore the capture outcome, including without SQLite."""
-        if manifest.get('task_summary', {}).get('reason') != 'zip_failed':
-            return collection_summary(manifest)
-        info = dict(manifest.get('last_run', {}))
-        saved = info.get('capture_summary') or {}
-        if saved.get('reason') == 'zip_failed':
-            # Older retries could overwrite the original outcome with ZIP failure.
-            # Reinterpret the remaining run evidence instead of keeping that loop.
-            saved = {}
-        info['task_summary'] = saved
-        return task_summary({**manifest, 'last_run': info, 'task_summary': saved}, running=False)
-
-    def rebuild_export(self, handle):
-        """A running checkpoint can lack CSV/text exports; rebuild all formats from SQLite."""
-        folder = self.base / handle
-        manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
-        status = manifest["status"]
-        if status == "running":
-            status = "paused"
-        if (folder / "archive.sqlite").is_file():
-            store = Store(folder, handle)
-            try:
-                if status == "complete" and (manifest.get("errors")
-                        or store.db.execute("SELECT 1 FROM captures WHERE status!='done' LIMIT 1").fetchone()
-                        or any(not post["text"] or any(media["status"] != "saved" for media in post["media"])
-                               for post in store.posts())):
-                    status = "partial"
-                manifest = export_collection(store, status, manifest.get("errors", []),
-                                             full=True, run_info={**manifest.get("last_run", {}),
-                                                 'task_summary': self.export_summary(manifest)})
-            finally:
-                store.close()
-        elif manifest["status"] == "running":
-            raise ValueError("该合集上次未完成，且缺少续传数据库 archive.sqlite，无法生成一致的 ZIP。")
-        self.progress(counts=manifest["counts"])
-        return status
-
-    def collect_batches(self, handle, options):
-        report = self.progress_callback(options.get('_run_id') or self.job.get('run_id'))
-        if not options.get('auto_continue', False):
-            return self.collector_for(handle)(handle, options, report, self.stop, base=self.base).run()
-        try:
-            initial = json.loads((self.base / handle / 'manifest.json').read_text(encoding='utf-8'))['counts']
-        except (OSError, ValueError, KeyError):
-            initial = {}
-        session = AutoBatches(True, initial, max_minutes=options.get('auto_max_minutes', 0))
-        settings = dict(options)
-        # Existing media must get a download turn immediately. Otherwise a resumed
-        # account can spend its entire first batch reading old snapshots again.
-        media_first = options.get('mode') != 'discover' and initial.get('media', 0) > initial.get('saved', 0)
-        status = 'paused'
-        while True:
-            if self.stop.is_set():
-                session.finish('user_pause', '已暂停，不再自动开始下一批')
-                break
-            if not session.remaining():
-                session.finish('session_limit', '达到设定的自动运行时间上限')
-                break
-            work_stage = ''
-            def batch_progress(**updates):
-                nonlocal work_stage
-                if updates.get('stage') in {'identity_search', 'local_aliases', 'repair', 'index', 'content', 'pages', 'media', 'sources'}:
-                    work_stage = updates['stage']
-                automatic = session.snapshot()
-                with self.lock:
-                    batch_counts = updates.get('batch', self.job.get('batch', {}))
-                automatic.update(current_batch=session.batches + 1,
-                                 new_files=session.new_files + batch_counts.get('new_files', 0),
-                                 reused_files=session.reused_files + batch_counts.get('reused_files', 0))
-                report(**updates, automatic=automatic)
-            self.progress(stage='repair', batch={}, completed=0, total=0, batch_started_at=now(),
-                     automatic={**session.snapshot(), 'current_batch': session.batches + 1},
-                     message=f'自动处理第 {session.batches + 1} 批，无需再次点击；可随时暂停。')
-            settings['max_minutes'] = min(options.get('max_minutes', 10), session.remaining() / 60)
-            batch_options = dict(settings)
-            # The worker publishes a complete offline collection and ZIP when
-            # the session ends (including pause/error). Intermediate batches
-            # only need the database and online manifest checkpoint.
-            batch_options['_defer_offline_export'] = True
-            batch_options['_skip_pages'] = bool(media_first)
-            discovery_deferred = media_first and options.get('mode', 'full') not in {'repair', 'rescue'}
-            if discovery_deferred:
-                batch_options['mode'] = 'repair'
-            if media_first:
-                self.progress(message='先下载已找到的媒体，再继续读取帖子快照。')
-            collector = self.collector_for(handle)(handle, batch_options, batch_progress, self.stop, base=self.base)
-            status = collector.run()
-            batch, counts = dict(self.job.get('batch', {})), dict(self.job.get('counts', {}))
-            if batch.get('stop_code') == 'storage_low':
-                raise StorageLow(batch.get('stop_reason') or '磁盘空间不足，请释放空间后继续。')
-            mode = settings.get('mode', 'full')
-            pending = (is_instagram(handle) and bool(self.job.get('work_pending'))) or (mode not in {'repair', 'rescue'} and (bool(counts.get('identity_pending')) or bool(counts.get('alias_search_pending')))) or bool(counts.get('local_alias_pending')) or discovery_deferred or ((media_first or settings.get('max_pages')) and counts.get('parsed', 0) < counts.get('captures', 0))
-            if mode not in {'discover', 'rescue'}:
-                pending = pending or bool(counts.get('media_retry_pending'))
-            if mode != 'discover' and (settings.get('multi_source') or mode == 'rescue'):
-                pending = pending or bool(counts.get('source_retry_pending')) or (
-                    settings.get('common_crawl', True) and bool(counts.get('cc_pending')))
-            # Unread pages remain pending even when no explicit page cap was set.
-            pending = bool(pending) or counts.get('parsed', 0) < counts.get('captures', 0)
-            if mode in {'full','discover'} and settings.get('multi_source'):
-                pending = pending or bool(counts.get('text_recovery_pending'))
-            cooldown = dict(self.job.get('retry_policy', {}))
-            alias = self.job.get('alias_discovery', {})
-            if mode in {'full', 'discover'} and alias.get('failed_items') and alias.get('next_retry_at'):
-                pending = True
-                if not cooldown.get('next_retry_at') or retry_epoch(alias['next_retry_at']) < retry_epoch(cooldown['next_retry_at']):
-                    cooldown.update(waiting=1, next_retry_at=alias['next_retry_at'])
-            keep_going = session.after_batch(status, batch, counts, self.stop.is_set(), pending=bool(pending),
-                                            cooldown=cooldown if not discovery_deferred else None)
-            if session.code == 'retry_cooldown':
-                with self.lock:
-                    exhausted = self.task_queue().retry_limit_for(options.get('_queue_id'), options.get('_run_id'), session.next_retry_at)
-                if exhausted:
-                    session.finish('retry_limit', REASONS['retry_limit'])
-                    session.next_retry_at = ''
-            self.progress(automatic=session.snapshot(), work_pending=bool(pending))
-            if not keep_going:
-                break
-            if not discovery_deferred and collector.index_ok == getattr(collector, 'index_expected', len(HOSTS)):
-                settings['_skip_index'] = True
-            # A slow page-reading batch must not indefinitely keep known media at
-            # the back of the queue. The following batch gives downloads a turn.
-            media_first = work_stage == 'pages' and settings.get('mode') != 'discover'
-            self.progress(stage='between_batches', message=f'第 {session.batches} 批已保存，{AUTO_REST_SECONDS} 秒后自动继续；连续无进展 {session.empty_batches}/3 批。')
-            if self.stop.wait(AUTO_REST_SECONDS):
-                session.finish('user_pause', '已暂停，不再自动开始下一批')
-                status = 'paused'
-                break
-        self.progress(automatic=session.snapshot())
-        if session.code == 'user_pause' or session.code in {'session_limit', 'batch_limit'}:
-            return 'paused'
-        if session.code in {'retry_cooldown', 'retry_limit'}:
-            return 'partial'
-        if session.code in {'no_progress', 'no_new_media'}:
-            counts = self.job.get('counts', {})
-            return 'partial' if counts.get('missing') or counts.get('media', 0) > counts.get('saved', 0) or counts.get('text_missing') else 'complete'
-        return status
-
-    def finalize_result(self, handle, status, options, *, zip_only=False, zip_failed=False):
-        """Persist a terminal interpretation before publishing the downloadable ZIP."""
-        folder = self.base / handle
-        manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
-        info = dict(manifest.get('last_run', {}))
-        if zip_only:
-            final = self.export_summary(manifest)
-        else:
-            info.pop('task_summary', None)
-            info.update(run_id=self.job.get('run_id', ''), automatic=self.job.get('automatic', {}),
-                        options={k: options[k] for k in ('mode', 'multi_source', 'common_crawl', 'public_mirrors', 'max_pages') if k in options})
-            final = task_summary({**manifest, **{k: self.job[k] for k in ('run_id', 'automatic', 'batch', 'work_pending', 'alias_discovery') if k in self.job},
-                                  'last_run': info, 'task_summary': {}, 'status': status, 'mode': options.get('mode', 'full'),
-                                  'errors': [] if options.get('mode') == 'identity' else manifest.get('errors', []),
-                                  'finished_at': now()}, running=False)
-        if zip_failed:
-            info['capture_summary'] = final
-            final = task_summary({**manifest, 'status': 'failed', 'task_summary': {**final, 'reason': 'zip_failed'}}, running=False)
-        info['task_summary'] = final
-        if not (folder / 'archive.sqlite').is_file():
-            if not zip_only:
-                raise ValueError('续传数据库缺失，已保留现有合集；请查看处理记录。')
-            manifest.update(task_summary=final, last_run=info)
-            publish_manifest(folder, manifest)
-            self.progress(counts=manifest['counts'], task_summary=final)
-            return manifest
-        store = Store(folder, handle)
-        try:
-            manifest = export_collection(store, status, manifest.get('errors', []), full=not zip_failed, run_info=info)
-        finally:
-            store.close()
-        self.progress(counts=manifest['counts'], task_summary=manifest['task_summary'])
-        return manifest
-
-    def record_collection_failure(self, handle):
-        """Keep a same-run terminal failure even when full export cannot complete."""
-        folder = self.base / handle
-        manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
-        if not self.job.get('run_id') or manifest.get('run_id') != self.job['run_id']:
-            return
-        info = {**manifest.get('last_run', {}), 'task_summary': {}}
-        final = task_summary({**manifest, **self.job, 'status': 'failed', 'task_summary': {}, 'last_run': info,
-                              'counts': manifest['counts'], 'finished_at': now()}, running=False)
-        manifest.update(status='failed', task_summary=final,
-                        last_run={**info, 'task_summary': final})
-        publish_manifest(folder, manifest)
-        self.progress(task_summary=final)
 
     def worker(self, handle, options, zip_only=False):
         run_id = options.get('_run_id')

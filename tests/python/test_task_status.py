@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from shiguangji.tasks import task_service
+from shiguangji.tasks import result_finalizer, task_service
 from shiguangji.collect.archive import Cancelled, Store, export_collection, zip_is_current
 from shiguangji.platforms.extractor import blank_post
 from shiguangji.tasks.job_state import read_job, write_job
@@ -220,7 +220,7 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(zip_is_current(self.base / 'alice'))
 
     def test_final_export_failure_is_saved_and_survives_restart(self):
-        with patch.object(app.TASKS, 'collect_batches', return_value='partial'), patch.object(task_service, 'export_collection', side_effect=OSError('export blocked')):
+        with patch.object(app.TASKS, 'collect_batches', return_value='partial'), patch.object(result_finalizer, 'export_collection', side_effect=OSError('export blocked')):
             app.TASKS.worker('alice', {})
         m = self.manifest()
         self.assertEqual(m['task_summary']['state'], 'failed')
@@ -246,7 +246,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_unwritable_collection_still_reports_same_run_failure_through_job(self):
         before = self.manifest()
-        with patch.object(app.TASKS, 'collect_batches', return_value='partial'), patch.object(task_service, 'export_collection', side_effect=OSError('export blocked')), patch.object(task_service, 'publish_manifest', side_effect=OSError('read only')):
+        with patch.object(app.TASKS, 'collect_batches', return_value='partial'), patch.object(result_finalizer, 'export_collection', side_effect=OSError('export blocked')), patch.object(result_finalizer, 'publish_manifest', side_effect=OSError('read only')):
             app.TASKS.worker('alice', {})
         self.assertEqual(self.manifest(), before)
         app.TASKS.restore_job()

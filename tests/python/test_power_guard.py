@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 import app
-from shiguangji.tasks import task_service
+from shiguangji.tasks import result_finalizer, task_service
 from shiguangji.system import power_guard as power
 
 
@@ -78,10 +78,10 @@ class WorkerPowerTests(unittest.TestCase):
         from shiguangji.storage.storage_policy import save_settings
         save_settings(self.base,{'zip_on_demand':False})  # Verify the optional automatic ZIP sleep guard.
         from shiguangji.platforms.extractor import blank_post
-        store = task_service.Store(self.base / 'alice', 'alice')
+        store = result_finalizer.Store(self.base / 'alice', 'alice')
         post = blank_post('1500000000000000000', 'alice'); post['text'] = 'Saved fixture'
         store.put_post(post)
-        task_service.export_collection(store, 'complete', [])
+        result_finalizer.export_collection(store, 'complete', [])
         store.close()
         self.data = patch.object(app.TASKS, 'base', self.base)
         self.state = patch.dict(app.TASKS.job, {'running': True, 'pause_requested': False, 'username': 'alice',

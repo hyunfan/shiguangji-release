@@ -100,7 +100,7 @@ class ReliabilityTests(unittest.TestCase):
     def test_low_space_pauses_queue_without_failing_pending_accounts(self):
         service=TaskService(self.base,collector_for=Mock(),options_for=dict)
         service.task_queue().add(['alice','bob'],{})
-        with patch('shiguangji.tasks.task_service.require_space',side_effect=StorageLow('full')),patch.object(service,'start') as start:
+        with patch('shiguangji.tasks.queue_coordinator.require_space',side_effect=StorageLow('full')),patch.object(service,'start') as start:
             service.advance_queue()
         start.assert_not_called();self.assertEqual(service.task_queue().data['reason'],'storage_low')
         self.assertEqual([i['state'] for i in service.task_queue().data['items']],['pending','pending'])

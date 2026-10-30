@@ -9,6 +9,7 @@
 - 升级：`deploy_release.py` 按上一版 `release.json`（老安装按旧模块名单）备份并删除新版不再包含的程序文件，避免从 1.28.2 升级后根目录残留旧模块；失败时自动恢复，用户数据与运行环境不在清理范围内。
 - 依赖方向：`original_url` 下沉到 `shiguangji/core/archive_urls.py`（`platforms.extractor` 继续导出），`core` 不再依赖 `platforms`；`identity_discovery`、`local_aliases` 移入 `collect`，`recovery_report` 移入 `storage`；新增基于 `ast` 的依赖方向守护测试，暂不修复的 3 处已知违规列入只减不增的名单。
 - 本地服务：`app.py` 的请求处理拆入 `shiguangji/web/`，GET/POST 改用路由表；“合集是否正在采集”的判断收敛为 `TaskService.collection_active`。`app.py` 仍是入口，启动方式、接口、令牌与来源校验不变。
+- 任务服务：`TaskService` 按职责拆为 `QueueCoordinator`（队列与历史）、`BatchRunner`（自动多批循环）、`ResultFinalizer`（结果解读与导出），`TaskService` 保留为门面，公开方法不变。
 
 ## 1.28.2 · 2026-10-18
 

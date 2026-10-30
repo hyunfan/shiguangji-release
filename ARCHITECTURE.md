@@ -33,7 +33,10 @@
 |---|---|
 | `app.py` | 入口与组装：命令行、单实例与后台启动；持有 `TASKS`、`CLOUD`、`STORAGE` 等单例。路由在请求时通过本模块读取这些对象，测试仍可直接替换 `app.*` |
 | `shiguangji/web/` | HTTP 安全边界（Host、Origin、`X-Local-Token`）、请求体限制、路由表分派与错误码映射；不导入根目录脚本 |
-| `shiguangji/tasks/task_service.py` | 每个资料库独立的任务状态、取消信号、自动续批、保存、打包与队列衔接 |
+| `shiguangji/tasks/task_service.py` | 门面：每个资料库独立的任务状态、取消信号、进度、后台线程、保存与打包；以下三个混入类的方法都挂在 `TaskService` 上，对外接口不变 |
+| `shiguangji/tasks/queue_coordinator.py` | `QueueCoordinator`：队列派发、自动重试计时、崩溃后续跑、任务历史检索与单条重试 |
+| `shiguangji/tasks/batch_runner.py` | `BatchRunner`：单次或自动多批采集循环与续批判断 |
+| `shiguangji/tasks/result_finalizer.py` | `ResultFinalizer`：结束原因解读、离线导出重建、失败记录写入 manifest |
 | `shiguangji/tasks/job_dispatch.py` / `shiguangji/tasks/task_queue.py` | 队列派发与原子持久化；准备失败和运行结束分别处理 |
 | `shiguangji/tasks/task_history.py` / `static/history.js` | 独立 SQLite 任务历史、旧数据补录、筛选分页与单条重试界面 |
 | `shiguangji/tasks/task_status.py` / `shiguangji/tasks/task_compat.py` | 当前结果展示；旧状态记录兼容推断 |

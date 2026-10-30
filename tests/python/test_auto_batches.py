@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from shiguangji.tasks import task_service
+from shiguangji.tasks import batch_runner, task_service
 from shiguangji.tasks.auto_batches import AutoBatches
 
 
@@ -87,7 +87,7 @@ class AutoWorkerTests(unittest.TestCase):
 
     def factory(self, results, calls):
         class FixtureCollector:
-            index_ok = len(task_service.HOSTS)
+            index_ok = len(batch_runner.HOSTS)
             def __init__(self, handle, options, report, stop, base):
                 self.options, self.report = dict(options), report
                 calls.append(self.options)
@@ -139,7 +139,7 @@ class AutoWorkerTests(unittest.TestCase):
     def test_live_new_files_survives_log_only_updates_without_counting_previous_batch_twice(self):
         seen, batches = [], [2, 3]
         class Collector:
-            index_ok = len(task_service.HOSTS)
+            index_ok = len(batch_runner.HOSTS)
             def __init__(self, handle, options, report, stop, base):
                 self.report = report
             def run(self):
