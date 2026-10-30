@@ -9,7 +9,7 @@
 | 位置 | 内容 |
 |---|---|
 | 根目录 | 入口：`app.py`（HTTP 服务）、`launcher.py`、`supervisor.py`、`windows_integration.py`、`desktop_launcher.pyw`、`setup_ffmpeg.py`；维护工具：`build_release.py`、`build_portable.py`、`check_publication.py`、`audit_publication.py`、`deploy_release.py`、`verify_portable.py`、`run_tests.py`、`audit_collection.py` |
-| `shiguangji/core/` | 无采集器依赖的公共基础：版本号、原子写入、错误类型、存档网址还原（`archive_urls.original_url`）、公共函数 |
+| `shiguangji/core/` | 无采集器依赖的公共基础：版本号、原子写入、错误类型、存档网址还原（`archive_urls.original_url`）、压缩文本读取（`stored_text`）、任务结果解读（`task_summary`）、公共函数 |
 | `shiguangji/platforms/` | 平台与账号：输入校验、平台注册、账号身份、X / Instagram 内容解析 |
 | `shiguangji/collect/` | 采集编排：X / Instagram 采集、旧名发现（`identity_discovery`）、本地旧名合集复用（`local_aliases`）、正文补取、运行预算 |
 | `shiguangji/sources/` | 数据来源：Wayback / 公开来源请求、重试冷却、各来源查询与 Common Crawl 查询计划 |
@@ -17,13 +17,13 @@
 | `shiguangji/storage/` | 存储：合集数据库、读取、导出（含缺失原因报告）、锁、删除、压缩、空间策略、备份、网盘副本与试读 |
 | `shiguangji/tasks/` | 任务：任务服务、队列与派发、状态与兼容、任务历史、自动续批 |
 | `shiguangji/web/` | 本地 HTTP 接口：请求处理与错误映射（handler）、GET/POST 路由表（routes_get / routes_post）、静态与 Range 文件（files）、采集参数（options）、Host/Origin/令牌校验（security） |
-| `shiguangji/system/` | 系统与可靠性：防休眠、守护设置与诊断、Windows Shell Link 接口 |
+| `shiguangji/system/` | 系统与可靠性：防休眠、守护设置与诊断、进程身份引用（`process_reference.ProcessReference`）、Windows Shell Link 接口 |
 
 包内模块统一使用绝对导入（`from shiguangji.<层> import 模块` 或 `from shiguangji.<层>.模块 import 名称`）。需要应用根目录的模块使用 `shiguangji.APP_ROOT`，不要用 `Path(__file__).parent` 推算。`cloud_backup.py`、`cloud_media.py` 以自身文件路径启动子进程，`backup_library.py`、`compact_library.py` 可按文件路径运行；这几个模块在以脚本方式运行时会把应用根目录加入 `sys.path`。新增模块时同步更新 `release_files.json`，`tests/python/test_package_layout.py` 会检查根目录与白名单。
 
 ### 依赖方向
 
-包之间只允许向下依赖：`core` → `platforms`（纯解析）→ `sources` / `media` / `storage`（同层可互相引用）→ `collect` → `tasks` → `web` → 根目录入口（`app.py` 等）。`system` 只依赖 `core`，可被任意层使用；包内模块不导入根目录脚本。`tests/python/test_package_layout.py` 用 `ast` 扫描全部 import（包括函数内的延迟导入）守护这一规则；暂时无法安全修复的已知违规列在该测试的 `KNOWN_VIOLATIONS` 中并注明原因，该名单只能减少，新增违规或已修复但未移除的条目都会让测试失败。
+包之间只允许向下依赖：`core` → `platforms`（纯解析）→ `sources` / `media` / `storage`（同层可互相引用）→ `collect` → `tasks` → `web` → 根目录入口（`app.py` 等）。`system` 只依赖 `core`，可被任意层使用；包内模块不导入根目录脚本。`tests/python/test_package_layout.py` 用 `ast` 扫描全部 import（包括函数内的延迟导入）守护这一规则；已知违规名单 `KNOWN_VIOLATIONS` 已清零，上限 `MAX_KNOWN_VIOLATIONS = 0`，任何新增违规都会让测试失败；守卫另有夹具测试，确认空名单下仍能识别延迟导入的上层模块和根目录脚本。遇到跨层需求时把共用部分下沉：只读的压缩文本读取在 `core/stored_text.py`（`storage/compressed_files.py` 保留写入与压缩并转出读取函数），单个清单的任务结果解读在 `core/task_summary.py`（`tasks/task_status.py` 转出），进程身份引用在 `system/process_reference.py`（`supervisor.py` 与网盘备份子进程共用）。
 
 ## 模块边界
 
@@ -40,7 +40,7 @@
 | `shiguangji/tasks/job_dispatch.py` / `shiguangji/tasks/task_queue.py` | 队列派发与原子持久化；准备失败和运行结束分别处理 |
 | `static/app-core.js` / `app-job.js` / `app-collection.js` / `app.js` | 主页面脚本：共享状态对象 `state` 与本地 API 客户端、任务面板、合集面板（含历史用户名与删除对话框）、轮询与表单控制器；均为 IIFE，经 `window.ShiguangjiApp` 共享，按此顺序加载，不使用 ES Modules。离线合集页只依赖 `gallery.js` |
 | `shiguangji/tasks/task_history.py` / `static/history.js` | 独立 SQLite 任务历史、旧数据补录、筛选分页与单条重试界面 |
-| `shiguangji/tasks/task_status.py` / `shiguangji/tasks/task_compat.py` | 当前结果展示；旧状态记录兼容推断 |
+| `shiguangji/core/task_summary.py` / `shiguangji/tasks/task_status.py` / `shiguangji/tasks/task_compat.py` | 单个清单或任务的结果解读（纯数据，导出清单也用）；结合当前任务的合集结果展示；旧状态记录兼容推断 |
 | `shiguangji/platforms/platform_accounts.py` / `shiguangji/platforms/platform_registry.py` | 输入校验、平台行为、账号信息；保留现有合集键 |
 | `windows_integration.py` / `shiguangji/system/windows_shortcuts.py` | 桌面入口与归属核对；通过 Windows Unicode Shell Link 接口创建、加载和读回快捷方式，不执行其目标 |
 | `shiguangji/collect/archive.py` / `shiguangji/collect/instagram_archive.py` | X / Instagram 采集编排；平台内容归属规则保持独立 |
@@ -118,9 +118,9 @@ Windows x64 便携包使用 `python build_portable.py` 构建；首次下载 `py
 python deploy_release.py diagnostics/releases/shiguangji-1.28.2.zip --target "C:\实际安装目录" --backup-root diagnostics/deploy-backups --port 8766
 ```
 
-升级时按安装目录中上一版的 `release.json` 找出新版不再包含的程序文件（仅限根目录 `.py`/`.pyw` 以及 `shiguangji/`、`static/` 下的代码与页面文件），先写入备份，待新文件全部校验通过后再删除；`collections/`、`runtime/`、`diagnostics/`、`tools/`、`python/`、FFmpeg、配置、文档和 `.cmd` 永不在清理范围内。没有 `release.json` 的老安装只按 `deploy_release.LEGACY_ROOT_MODULES`（1.28.2 及更早版本平铺在根目录的 52 个模块名）识别旧模块，且仅当新版已包含 `shiguangji/` 包时才清理。新增文件与删除的旧文件分别记入备份中 `rollback-files.json` 的 `added` 与 `removed`，升级失败时自动恢复被删除的文件。升级前检查服务归属和任务空闲；保存程序文件备份；温和停止旧后台，校验更新文件，按升级前状态恢复后台；失败时回退程序文件。不建立开机自启动，不覆盖 `collections/`。
+升级时按安装目录中上一版的 `release.json` 找出新版不再包含的程序文件（仅限根目录 `.py`/`.pyw` 以及 `shiguangji/`、`static/` 下的代码与页面文件），先写入备份，待新文件全部校验通过后再删除；`collections/`、`runtime/`、`diagnostics/`、`tools/`、`python/`、FFmpeg、配置、文档和 `.cmd` 永不在清理范围内。没有 `release.json` 的老安装只按 `deploy_release.LEGACY_ROOT_MODULES`（1.28.2 及更早版本平铺在根目录的 52 个模块名）识别旧模块，且仅当新版已包含 `shiguangji/` 包时才清理。新增文件与删除的旧文件分别记入备份中 `rollback-files.json` 的 `added` 与 `removed`，升级失败时自动恢复被删除的文件。升级成功后再清理 `shiguangji/` 包内源文件已不存在的字节码（`__pycache__` 中的孤立 `.pyc` 与无源 `.pyc`，以及清空后的缓存目录）；字节码不进备份，回退只恢复源文件，Python 会重新编译，因此失败回退时不做这一步，也不影响回退能力；包外目录和用户数据不在范围内，删除失败的文件跳过。升级前检查服务归属和任务空闲；保存程序文件备份；温和停止旧后台，校验更新文件，按升级前状态恢复后台；失败时回退程序文件。不建立开机自启动，不覆盖 `collections/`。
 
-1.27 起，`shiguangji/storage/compressed_files.py` 提供逻辑文件读取，原始网页可存为 `.txt.gz`，备份对象可存为 `<sha256>.gz`。索引始终记录解压后的内容摘要和大小；原有时间戳保留。`shiguangji/storage/compact_library.py` 逐文件压缩、解压校验、最终路径读回，再释放对应的普通副本；进度保存在资料库内，失败项保留原件且可重试。新采集及新增备份对象自动压缩。媒体原件不进入压缩流程。网盘包和下载 ZIP 输出兼容旧版本的普通文件。
+1.27 起，`shiguangji/storage/compressed_files.py` 提供逻辑文件读取（只读部分位于 `shiguangji/core/stored_text.py`，供下层直接使用），原始网页可存为 `.txt.gz`，备份对象可存为 `<sha256>.gz`。索引始终记录解压后的内容摘要和大小；原有时间戳保留。`shiguangji/storage/compact_library.py` 逐文件压缩、解压校验、最终路径读回，再释放对应的普通副本；进度保存在资料库内，失败项保留原件且可重试。新采集及新增备份对象自动压缩。媒体原件不进入压缩流程。网盘包和下载 ZIP 输出兼容旧版本的普通文件。
 
 数据压缩完成后，**回退到 1.26 或更早版本前必须先解压数据**：停止归档任务，在当前版本运行 `python shiguangji/storage/compact_library.py --base "实际合集目录" --expand`（1.27～1.28.2 中该脚本位于根目录 `compact_library.py`），确认结果无失败后再回退程序。解压会重新占用压缩所节省的空间。迁移和反向迁移都不删除合集内容或修改备份索引。
 

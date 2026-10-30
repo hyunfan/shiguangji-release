@@ -17,6 +17,8 @@
 - 长函数（续）：`hls_recovery.recover` 拆为分片缓存（`_SegmentCache`）、播放列表选择、分轨写入与合并发布；`Collector.download_media` 拆出单项下载、索引变体查找与失败记录；`identity_discovery.discover_aliases` 改由 `_AliasSearch` 管理状态、任务与收尾；`public_sources.discover` 拆出元数据读取、来源解析、身份核对、正文补取与媒体合并。拆分前先补特征测试，行为不变。
 - 前端：`static/app.js` 的约 40 个闭包状态变量收进一个 `state` 对象，按面板拆为 `app-core.js`（状态、格式化与 API）、`app-job.js`（任务与队列）、`app-collection.js`（合集、历史用户名与删除）和 `app.js`（轮询、表单与设置），仍是 IIFE + 全局对象，不引入框架或 ES Modules；超长行拆开（最长 831 → 165 个字符，剩余为单个文本模板）。离线合集页不受影响。
 - 测试：为 `storage/storage_service.py`、`supervisor.py`、`launcher.py` 补行为测试（`test_storage_service.py`、`test_supervisor.py`、`test_launcher_background.py`），覆盖空间任务的预览/释放/暂停/失败与网盘试读、守护的重启退避与停止、后台启动/停止与锁竞争；覆盖率分别 22% → 98%、53% → 78%、72% → 91%，剩余主要是 Windows 专属分支（相应用例在 Linux 上跳过）。
+- 依赖方向（续）：包结构守卫的已知违规名单清零（上限改为 0）。压缩文本的只读函数下沉到 `core/stored_text.py`，`platforms.account_identity` 不再导入 `storage`；单个清单的任务结果解读下沉到 `core/task_summary.py`，`storage.collection_export` 不再导入 `tasks`；`ProcessReference` 移到 `system/process_reference.py`，`storage.cloud_backup` 不再导入根目录 `supervisor.py`。原模块继续转出这些名称，行为不变；守卫新增夹具测试，确认空名单下仍能拦截这三类延迟导入。
+- 升级：`deploy_release.py` 在升级成功后清理 `shiguangji/` 包内源文件已不存在的 `.pyc`（含 `__pycache__` 孤立缓存与无源字节码）及清空的缓存目录，结果计入输出的 `bytecode_removed`；升级失败回退时不清理，备份与回退流程不变，包外目录和用户数据不受影响。
 
 ## 1.28.2 · 2026-10-18
 
