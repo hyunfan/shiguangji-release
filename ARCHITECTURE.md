@@ -43,7 +43,7 @@
 | `shiguangji/platforms/platform_accounts.py` / `shiguangji/platforms/platform_registry.py` | 输入校验、平台行为、账号信息；保留现有合集键 |
 | `windows_integration.py` / `shiguangji/system/windows_shortcuts.py` | 桌面入口与归属核对；通过 Windows Unicode Shell Link 接口创建、加载和读回快捷方式，不执行其目标 |
 | `shiguangji/collect/archive.py` / `shiguangji/collect/instagram_archive.py` | X / Instagram 采集编排；平台内容归属规则保持独立 |
-| `shiguangji/sources/archive_http.py` / `shiguangji/sources/source_http.py` | Wayback / 公开来源的请求、跳转校验、超时、预算与取消 |
+| `shiguangji/sources/archive_http.py` / `shiguangji/sources/source_http.py` | Wayback / 公开来源的请求、跳转校验、超时、预算与取消（共用 `cancellation.CancellableClient.check`） |
 | `shiguangji/core/archive_support.py` / `shiguangji/core/core_errors.py` | 无采集器依赖的公共函数、错误类型和错误分类 |
 | `shiguangji/media/media_download.py` / `shiguangji/media/media_files.py` | 流式下载、结构检查、摘要检查、原子发布、缓存验证 |
 | `shiguangji/media/media_inventory.py` | 只读按帖汇总明确视频 ID、封面、文件摘要重复记录；不更改原记录、下载状态或恢复调度 |

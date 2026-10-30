@@ -11,8 +11,9 @@ from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
-from shiguangji.core.core_errors import ArchiveError, Cancelled
+from shiguangji.core.core_errors import ArchiveError
 from shiguangji.media.media_download import download_media
+from shiguangji.sources.cancellation import CancellableClient
 from shiguangji.sources.retry_policy import DeferredRequest
 from shiguangji.platforms.extractor import media_item
 
@@ -76,7 +77,7 @@ class SourceRedirect(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-class SourceClient:
+class SourceClient(CancellableClient):
     def __init__(self, stop=None, log=lambda message:None, proxy='', delay=0.8, max_requests=650, budget=None):
         self.budget = budget
         self.stop = stop or threading.Event()
@@ -90,11 +91,6 @@ class SourceClient:
                 raise ValueError('代理地址应为 HTTP 或 HTTPS 地址。')
             handlers.append(ProxyHandler({'http':proxy,'https':proxy}))
         self.opener = build_opener(*handlers)
-    def check(self):
-        if self.stop.is_set():
-                raise Cancelled()
-        if self.budget:
-            self.budget.check()
     def wait(self, seconds):
         self.check()
         if self.budget:

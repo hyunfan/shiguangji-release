@@ -14,6 +14,7 @@ from shiguangji.core.core_errors import ArchiveError, Cancelled
 from shiguangji.core.archive_support import CDX, CDX_SUCCESS_FILTER
 from shiguangji.platforms.extractor import media_item, original_url, post_id
 from shiguangji.media.media_download import download_media
+from shiguangji.sources.cancellation import CancellableClient
 
 def archive_only(url):
     u = urlsplit(url)
@@ -27,7 +28,7 @@ class ArchiveRedirect(HTTPRedirectHandler):
         archive_only(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
-class Client:
+class Client(CancellableClient):
     def __init__(self, stop=None, log=lambda x: None, proxy="", delay=1.2, attempts=3, budget=None):
         self.budget = budget
         self.stop = stop or threading.Event()
@@ -42,11 +43,6 @@ class Client:
         self.last = 0
         self.requests = 0
         self.retry_policy = None
-    def check(self):
-        if self.stop.is_set():
-            raise Cancelled()
-        if self.budget:
-            self.budget.check()
     def wait(self, seconds):
         self.check()
         if self.budget:

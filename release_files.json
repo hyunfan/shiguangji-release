@@ -53,6 +53,7 @@
   "shiguangji/platforms/platform_registry.py",
   "shiguangji/sources/__init__.py",
   "shiguangji/sources/archive_http.py",
+  "shiguangji/sources/cancellation.py",
   "shiguangji/sources/archived_sources.py",
   "shiguangji/sources/commoncrawl_source.py",
   "shiguangji/sources/public_sources.py",
