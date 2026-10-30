@@ -102,7 +102,7 @@ python -X utf8 run_tests.py
 python build_release.py
 ```
 
-Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `tests/frontend/`。旧 `test_*.py` 的测试名称保持不变。诊断脚本保留在 `diagnostics/`，不进入发布包。
+Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `tests/frontend/`。只在 Windows 上成立的分支（进程句柄、`msvcrt` 锁、隐藏窗口启动）用 `skipUnless(os.name == 'nt')` 标记，CI 的 Windows 任务会运行它们。旧 `test_*.py` 的测试名称保持不变。诊断脚本保留在 `diagnostics/`，不进入发布包。
 
 `check_publication.py` 将 Git 已跟踪的当前文件复制到临时源码目录，拒绝私有数据路径、链接和越界路径，再扫描源码并构建白名单发布包。验证同时比较包内清单、实际字节和导出源码；便携包额外与固定官方运行时核对。配置文件（含 YAML、TOML、INI 和 `.env.example`）也参加隐私扫描；测试凭据仅豁免指定文件中两条完整虚构网址的摘要。检查规则不能证明没有其他隐私，远程历史及附件仍须单独审查。
 
