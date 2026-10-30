@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 import zipfile
 
 import build_portable as portable
@@ -65,6 +67,32 @@ class PortableTests(unittest.TestCase):
             self.assertIn(name, files)
         for name in files:
             self.assertFalse(name.startswith(('collections/', 'runtime/', 'diagnostics/', 'python/', 'tests/')))
+
+    def test_consecutive_builds_keep_the_same_outer_sha256(self):
+        def payload():
+            return {'b.txt': b'beta', 'a.txt': '甲'.encode(), '启动.txt': b'cmd'}
+
+        def clock(hour):
+            def localtime(_seconds=None):
+                return time.struct_time((2024, 6, 15, hour, 30, 0, 5, 167, 0))
+            return localtime
+
+        with tempfile.TemporaryDirectory() as folder:
+            with patch('time.localtime', clock(1)):
+                left = build_release.write_package(folder, 'left.zip', payload(), edition='source')
+            with patch('time.localtime', clock(9)):
+                right = build_release.write_package(folder, 'right.zip', payload(), edition='source')
+            left_sha = hashlib.sha256(left.read_bytes()).hexdigest()
+            right_sha = hashlib.sha256(right.read_bytes()).hexdigest()
+            self.assertEqual(left_sha, right_sha)
+            with zipfile.ZipFile(left) as archive:
+                self.assertEqual(archive.namelist(), sorted([*payload(), 'release.json']))
+                self.assertTrue(all(item.date_time == (1980, 1, 1, 0, 0, 0) for item in archive.infolist()))
+                self.assertTrue(all(item.compress_type == zipfile.ZIP_DEFLATED for item in archive.infolist()))
+                self.assertEqual(archive.read('启动.txt'), b'cmd')
+                manifest = json.loads(archive.read('release.json'))
+                self.assertEqual(manifest['edition'], 'source')
+                self.assertEqual(manifest['files'], {name: hashlib.sha256(data).hexdigest() for name, data in payload().items()})
 
     def test_all_files_and_runtime_provenance_are_in_manifest(self):
         with tempfile.TemporaryDirectory() as folder:

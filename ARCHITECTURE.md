@@ -108,7 +108,7 @@ Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `te
 
 `.github/workflows/checks.yml` 使用只读仓库权限和固定提交摘要的 GitHub Actions。Windows 上分别运行 Python 3.10 / 3.14 及前端测试，通过后运行 `check_publication.py --portable --smoke`。另有一个 Ubuntu 任务用固定版本的 ruff 按 `ruff.toml`（只启用 F 与 B 规则）做静态检查；ruff 只在 CI 安装，不是运行依赖。工作流只使用合成数据、临时目录和固定官方 Python 下载，不读取真实合集，也不自动发布或升级安装目录。该检查入口、工作流和问题模板属于源码维护工具，不进入程序发布白名单。
 
-`shiguangji/core/app_version.py` 是应用版本的唯一来源。`release_files.json` 明确列出发布文件；构建包含 `release.json` 的逐文件摘要，排除合集、运行状态、日志、测试与诊断数据。
+`shiguangji/core/app_version.py` 是应用版本的唯一来源。`release_files.json` 明确列出发布文件；构建包含 `release.json` 的逐文件摘要，排除合集、运行状态、日志、测试与诊断数据。发布 ZIP 按文件名顺序写入条目，并把时间戳固定在 ZIP 纪元（1980-01-01 00:00:00），因此同一目录树连续构建得到相同的包 SHA-256。逐文件摘要和升级校验仍只看文件内容。
 
 Windows x64 便携包使用 `python build_portable.py` 构建；首次下载 `python-runtime.json` 固定的官方嵌入式 ZIP，核对 SHA256 后缓存到 `diagnostics/runtime-cache`。离线构建可传 `--runtime-zip 路径`。构建保留所有官方组件及许可，仅将 `python314._pth` 改为标准库、运行环境目录和应用根目录，不加载系统 PYTHONPATH、用户包或 site。运行文件放在 `python/`，与可写日志 `runtime/` 分开。根目录 `portable.json` 是来源记录和完整解压标志；缺失运行环境时启动脚本明确失败。便携包另命名为 `shiguangji-版本-windows-x64-portable.zip`，不会替换源码发布包。
 
