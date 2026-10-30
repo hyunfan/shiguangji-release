@@ -31,6 +31,32 @@ from shiguangji.storage.storage_guard import StorageLow, require_space, rotate_l
 from shiguangji.storage.collection_export import export_collection
 from shiguangji.storage.collection_export import make_zip, zip_is_current  # noqa: F401
 
+class _MediaAttempt:
+    """Download attempts for one media item; each replay URL is requested at most once."""
+    def __init__(self, collector, post, item, saved, max_bytes):
+        self.collector, self.post, self.item, self.saved, self.max_bytes = collector, post, item, saved, max_bytes
+        self.tried = set()
+        self.failures = []
+    def __call__(self, url):
+        if url in self.tried:
+            return False
+        self.tried.add(url)
+        p, m, collector = self.post, self.item, self.collector
+        m["attempts"] = m.get("attempts", 0) + 1
+        try:
+            month = p["created_at"][:7].replace("-", "/") if p["created_at"] else "unknown-date"
+            key = hashlib.sha256(m["key"].encode()).hexdigest()[:12]
+            result = collector.client.download(url, collector.folder / "media" / month / f"{p['id']}_{key}.bin", self.max_bytes)
+            m.update(status="saved", path=result["file"].relative_to(collector.folder).as_posix(),
+                     bytes=result["bytes"], sha256=result["sha256"], archive_url=result["archive_url"], error="")
+            m.update(error_kind="", checked_at=now())
+            self.saved[m["key"]] = dict(m)
+            collector.mark_saved(m)
+            return True
+        except ArchiveError as e:
+            self.failures.append((failure_kind(e), str(e)))
+            return False
+
 class Collector:
     def __init__(self, handle, options=None, progress=lambda **k: None, stop=None, base=DATA, client=None):
         self.handle, self.options = handle, options or {}
@@ -418,80 +444,54 @@ class Collector:
                     ts = m.get("hint_timestamp") or next((c["timestamp"] for c in p["captures"]), "*")
                     m["archive_url"] = replay(ts, m["urls"][0], raw=False)
                     continue
-                candidates = []
-                timestamps = sorted({c["timestamp"] for c in p["captures"]}, reverse=True)
-                if m.get("hint_timestamp"):
-                    timestamps = list(dict.fromkeys([m["hint_timestamp"]] + timestamps))
-                # Exact original URL first; no request ever goes to live Twitter/CDNs.
-                for url in m["urls"][:2]:
-                    for ts in timestamps[:2]:
-                        candidates.append(replay(ts, url))
-                reason = "没有找到可下载的媒体存档。"
-                failure = 'not_found'
-                failures = []
-                indexed = None
-                success = False
-                tried = set()
-                def attempt(url):
-                    nonlocal reason, failure
-                    if url in tried:
-                        return False
-                    tried.add(url)
-                    m["attempts"] = m.get("attempts", 0) + 1
-                    try:
-                        month = p["created_at"][:7].replace("-", "/") if p["created_at"] else "unknown-date"
-                        key = hashlib.sha256(m["key"].encode()).hexdigest()[:12]
-                        result = self.client.download(url, self.folder / "media" / month / f"{p['id']}_{key}.bin", max_bytes)
-                        m.update(status="saved", path=result["file"].relative_to(self.folder).as_posix(),
-                                 bytes=result["bytes"], sha256=result["sha256"], archive_url=result["archive_url"], error="")
-                        m.update(error_kind="", checked_at=now())
-                        saved[m["key"]] = dict(m)
-                        self.mark_saved(m)
-                        return True
-                    except ArchiveError as e:
-                        reason = str(e)
-                        failure = failure_kind(e)
-                        failures.append((failure,reason))
-                        return False
-                for candidate in candidates:
-                    if attempt(candidate):
-                        success = True
-                        break
-                if not success:
-                    # A CDN resource may only be captured in a different size or much later.
-                    prefix = media_search_prefix(m)
-                    try:
-                        indexed = False
-                        for records in self.client.cdx(prefix, "prefix"):
-                            for r in records:
-                                variant = media_item(r["original"])
-                                if variant and variant["key"] == m["key"]:
-                                    indexed = True
-                                    if attempt(replay(r["timestamp"], r["original"])):
-                                        success = True
-                                        break
-                            if success:
-                                break
-                    except ArchiveError as e:
-                        indexed = None
-                        reason = str(e)
-                        failure = failure_kind(e)
-                        failures.append((failure,reason))
-                if not success:
-                    uncertain = [entry for entry in failures if entry[0] != 'not_found']
-                    if uncertain:
-                        failure,reason = uncertain[-1]
-                    category = "not_indexed" if indexed is False and failure == "not_found" else failure
-                    if category == "not_indexed":
-                        reason = "原链接返回 404，当前索引也未找到同一媒体的其他尺寸存档。"
-                    m.update(status="failed", path="", error=reason, error_kind=category, checked_at=now(), checked_context=media_context(p, m))
-                    m["archive_url"] = replay(timestamps[0], m["urls"][0], raw=False) if timestamps else ""
-                    failed_cache[m["key"]] = {k: m[k] for k in ("status", "path", "error", "error_kind", "checked_at", "archive_url")}
+                self.download_media_item(p, m, saved, failed_cache, max_bytes)
                 self.store.save_post(p)
             self.store.save_post(p)
             self.progress(completed=number, total=len(pending_posts))
             self.checkpoint("running")
         self.progress(completed=len(pending_posts), total=len(pending_posts))
+    def download_media_item(self, p, m, saved, failed_cache, max_bytes):
+        """Try exact replays, then other indexed sizes of the same media; record the outcome on m."""
+        timestamps = sorted({c["timestamp"] for c in p["captures"]}, reverse=True)
+        if m.get("hint_timestamp"):
+            timestamps = list(dict.fromkeys([m["hint_timestamp"]] + timestamps))
+        # Exact original URL first; no request ever goes to live Twitter/CDNs.
+        candidates = [replay(ts, url) for url in m["urls"][:2] for ts in timestamps[:2]]
+        attempt = _MediaAttempt(self, p, m, saved, max_bytes)
+        indexed = None
+        success = any(attempt(candidate) for candidate in candidates)
+        if not success:
+            # A CDN resource may only be captured in a different size or much later.
+            success, indexed = self.download_indexed_variant(m, attempt)
+        if not success:
+            self.record_media_failure(p, m, timestamps, attempt.failures, indexed, failed_cache)
+    def download_indexed_variant(self, m, attempt):
+        """Return (saved, indexed); indexed is None when the index itself could not be read."""
+        prefix = media_search_prefix(m)
+        indexed = False
+        try:
+            for records in self.client.cdx(prefix, "prefix"):
+                for r in records:
+                    variant = media_item(r["original"])
+                    if variant and variant["key"] == m["key"]:
+                        indexed = True
+                        if attempt(replay(r["timestamp"], r["original"])):
+                            return True, indexed
+        except ArchiveError as e:
+            attempt.failures.append((failure_kind(e), str(e)))
+            return False, None
+        return False, indexed
+    def record_media_failure(self, p, m, timestamps, failures, indexed, failed_cache):
+        failure, reason = failures[-1] if failures else ('not_found', "没有找到可下载的媒体存档。")
+        uncertain = [entry for entry in failures if entry[0] != 'not_found']
+        if uncertain:
+            failure,reason = uncertain[-1]
+        category = "not_indexed" if indexed is False and failure == "not_found" else failure
+        if category == "not_indexed":
+            reason = "原链接返回 404，当前索引也未找到同一媒体的其他尺寸存档。"
+        m.update(status="failed", path="", error=reason, error_kind=category, checked_at=now(), checked_context=media_context(p, m))
+        m["archive_url"] = replay(timestamps[0], m["urls"][0], raw=False) if timestamps else ""
+        failed_cache[m["key"]] = {k: m[k] for k in ("status", "path", "error", "error_kind", "checked_at", "archive_url")}
     def saved_file_valid(self, m):
         return saved_file_valid(self.folder, m, self.client.check)
     def cached(self, p, m):

@@ -111,35 +111,54 @@ def run_tool(args, check, timeout=180, cwd=None):
             if child.poll() is None:child.kill();child.wait(timeout=5)
 
 
-def recover(collector, http, post, item, destination, max_bytes):
-    ffmpeg,ffprobe=binary('ffmpeg'),binary('ffprobe')
-    urls=list(dict.fromkeys(u for u in item['urls'] if '.m3u8' in urlsplit(u).path))
-    if not urls:raise ArchiveError('没有 HLS 播放列表。',reason='hls_unsupported')
-    anchor=urls[0];asset(anchor)
-    cache=collector.folder/'.hls-cache'/hashlib.sha256(anchor.encode()).hexdigest()
-    cache.mkdir(parents=True,exist_ok=True)
-    cap=max_bytes or 512*1024**2
-    ledger_path=cache/'segments.json'
-    try:ledger=json.loads(ledger_path.read_text(encoding='utf-8'))
+def _load_ledger(path):
+    try:ledger=json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):ledger={}
     # This is a disposable cache, not archive data. Invalid receipts are fetched
     # and checked again instead of aborting the account's whole recovery task.
     if not isinstance(ledger,dict):ledger={}
-    ledger={key:value for key,value in ledger.items() if isinstance(value,dict)}
-    total=0;sources=[];local_playlists=[];expected=0
+    return {key:value for key,value in ledger.items() if isinstance(value,dict)}
 
-    def fetch(url, limit, stamp=''):
+
+class _SegmentCache:
+    """Per-asset cache of verified playlist and segment bytes, keyed by request URL."""
+
+    def __init__(self, collector, http, anchor):
+        self.collector,self.http,self.anchor=collector,http,anchor
+        self.folder=collector.folder/'.hls-cache'/hashlib.sha256(anchor.encode()).hexdigest()
+        self.folder.mkdir(parents=True,exist_ok=True)
+        self.ledger_path=self.folder/'segments.json'
+        self.ledger=_load_ledger(self.ledger_path)
+
+    def fetch(self, url, limit, stamp=''):
         if limit <= 0:raise ArchiveError('视频总大小超过限制。',reason='too_large')
-        if asset(url)!=asset(anchor):raise ArchiveError('分片身份不一致。',reason='hls_unsupported')
+        if asset(url)!=asset(self.anchor):raise ArchiveError('分片身份不一致。',reason='hls_unsupported')
         endpoint=replay(stamp,url) if stamp else url
-        key=hashlib.sha256(endpoint.encode()).hexdigest();path=cache/(key+'.bin')
-        receipt=ledger.get(key,{})
+        key=hashlib.sha256(endpoint.encode()).hexdigest();path=self.folder/(key+'.bin')
+        receipt=self.ledger.get(key,{})
         if path.is_file() and path.stat().st_size<=limit and receipt.get('sha256'):
             data=path.read_bytes()
             if len(data)<=limit and hashlib.sha256(data).hexdigest()==receipt['sha256']:
                 return data,receipt.get('source_url',endpoint)
-        require_space(cache,limit)
-        client=collector.client if stamp else http
+        require_space(self.folder,limit)
+        client=self.collector.client if stamp else self.http
+        data,actual=self._download(client,endpoint,limit)
+        if not data:raise ArchiveError('视频分片为空。',reason='invalid_media')
+        if '.m3u8' in urlsplit(url).path:
+            parse_playlist(bytes(data),url)
+        elif not (data[0]==0x47 or bytes(data[4:8]) in {b'ftyp',b'styp',b'moof',b'moov',b'sidx'}):
+            raise ArchiveError('返回的不是视频分片。',reason='invalid_media')
+        atomic_write_bytes(path,bytes(data))
+        self.ledger[key]={'sha256':hashlib.sha256(data).hexdigest(),'source_url':actual}
+        atomic_write_text(self.ledger_path,json.dumps(self.ledger))
+        count=int(self.collector.setting('hls_segments') or 0)+1
+        self.collector.setting('hls_segments',str(count))
+        if hasattr(self.collector,'budget'):
+            self.collector.budget.last_saved=time.monotonic()
+        return bytes(data),actual
+
+    @staticmethod
+    def _download(client, endpoint, limit):
         try:
             with client.open(endpoint) as response:
                 data=bytearray()
@@ -148,59 +167,58 @@ def recover(collector, http, post, item, destination, max_bytes):
                     if len(data)>limit:raise ArchiveError('视频分片超过大小限制。',reason='too_large')
                 length=response.headers.get('Content-Length')
                 if length and int(length)!=len(data):raise OSError('Incomplete segment')
-                actual=response.url
+                return data,response.url
         except (OSError,HTTPException,EOFError) as error:
             policy=getattr(client,'retry_policy',None)
             if policy:policy.failure(endpoint)
             raise ArchiveError('视频分片读取中断，已保留完整分片供后续继续。',reason='network') from error
-        if not data:raise ArchiveError('视频分片为空。',reason='invalid_media')
-        if '.m3u8' in urlsplit(url).path:
-            parse_playlist(bytes(data),url)
-        elif not (data[0]==0x47 or bytes(data[4:8]) in {b'ftyp',b'styp',b'moof',b'moov',b'sidx'}):
-            raise ArchiveError('返回的不是视频分片。',reason='invalid_media')
-        atomic_write_bytes(path,bytes(data))
-        ledger[key]={'sha256':hashlib.sha256(data).hexdigest(),'source_url':actual}
-        atomic_write_text(ledger_path,json.dumps(ledger))
-        count=int(collector.setting('hls_segments') or 0)+1
-        collector.setting('hls_segments',str(count))
-        if hasattr(collector,'budget'):
-            collector.budget.last_saved=time.monotonic()
-        return bytes(data),actual
 
-    # Try the current public original first, then exact archived playlists.
+
+def _select_playlist(collector, cache, urls, anchor):
+    """Try the current public original first, then exact archived playlists."""
     attempts=[(u,'') for u in urls[:3]]
     last=None;selected=None
     for url,stamp in attempts:
-        try:selected=(url,stamp,parse_playlist(fetch(url,1024**2,stamp)[0],url));break
+        try:selected=(url,stamp,parse_playlist(cache.fetch(url,1024**2,stamp)[0],url));break
         except ArchiveError as error:last=error
     if selected is None:
         for records in collector.client.cdx(anchor):
             for row in records[:3]:
-                try:selected=(anchor,row['timestamp'],parse_playlist(fetch(anchor,1024**2,row['timestamp'])[0],anchor));break
+                try:selected=(anchor,row['timestamp'],parse_playlist(cache.fetch(anchor,1024**2,row['timestamp'])[0],anchor));break
                 except ArchiveError as error:last=error
             break
     if selected is None:raise last or ArchiveError('没有可读取的 HLS 存档。')
-    url,stamp,playlist=selected
+    return selected
+
+
+def _write_tracks(collector, cache, url, stamp, playlist, cap):
+    """Fetch every track's segments into the cache and write local-only playlists."""
+    total=0;sources=[];local_playlists=[];expected=0
     tracks=playlist.get('variants',[url])
     for track_index,track in enumerate(tracks):
-        plan=playlist if track==url and 'segments' in playlist else parse_playlist(fetch(track,1024**2,stamp)[0],track)
+        plan=playlist if track==url and 'segments' in playlist else parse_playlist(cache.fetch(track,1024**2,stamp)[0],track)
         if 'segments' not in plan:raise ArchiveError('HLS 嵌套层级超限。',reason='hls_unsupported')
         expected=max(expected,plan['duration'])
         lines=['#EXTM3U','#EXT-X-VERSION:7','#EXT-X-TARGETDURATION:600','#EXT-X-MEDIA-SEQUENCE:0']
         if plan['initial']:
-            data,actual=fetch(plan['initial'],min(16*1024**2,cap-total),stamp);total+=len(data);sources.append(actual)
-            name=f'init-{track_index}.mp4';atomic_write_bytes(cache/name,data);lines.append(f'#EXT-X-MAP:URI="{name}"')
+            data,actual=cache.fetch(plan['initial'],min(16*1024**2,cap-total),stamp);total+=len(data);sources.append(actual)
+            name=f'init-{track_index}.mp4';atomic_write_bytes(cache.folder/name,data);lines.append(f'#EXT-X-MAP:URI="{name}"')
         for index,(segment,duration) in enumerate(plan['segments']):
             collector.client.check()
-            data,actual=fetch(segment,min(64*1024**2,cap-total),stamp)
+            data,actual=cache.fetch(segment,min(64*1024**2,cap-total),stamp)
             total+=len(data);sources.append(actual)
             if total>cap:raise ArchiveError('视频总大小超过限制。',reason='too_large')
             name=f'part-{track_index}-{index}.'+('m4s' if plan['initial'] else 'ts')
-            atomic_write_bytes(cache/name,data)
+            atomic_write_bytes(cache.folder/name,data)
             lines.extend([f'#EXTINF:{duration},',name])
             collector.log(f'HLS 已读取分片 {index+1}/{len(plan["segments"])}')
         lines.append('#EXT-X-ENDLIST')
-        local=cache/f'track-{track_index}.m3u8';atomic_write_text(local,'\n'.join(lines)+'\n');local_playlists.append(local)
+        local=cache.folder/f'track-{track_index}.m3u8';atomic_write_text(local,'\n'.join(lines)+'\n');local_playlists.append(local)
+    return total,sources,local_playlists,expected
+
+
+def _merge_and_publish(collector, ffmpeg, ffprobe, local_playlists, expected, destination, total):
+    """Merge local playlists offline, decode-check the result, then publish it by hash."""
     destination.parent.mkdir(parents=True,exist_ok=True)
     temporary=destination.with_suffix('.part.mp4')
     require_space(destination,total)
@@ -220,7 +238,20 @@ def recover(collector, http, post, item, destination, max_bytes):
             while block:=reader.read(1024*1024):collector.client.check();sha.update(block)
         final=destination.with_name(destination.stem+'_'+sha.hexdigest()[:12]+'.mp4')
         replace_file(temporary,final)
-        return {'file':final,'sha256':sha.hexdigest(),'bytes':final.stat().st_size,'validation_version':VALIDATION_VERSION,
-                'hls':{'playlist':url,'scope':'wayback' if stamp else 'current_public','segments':len(sources),
-                       'duration':duration,'checked_at':now(),'sources':sources,'decoded':True}}
+        return final,sha.hexdigest(),duration
     finally:temporary.unlink(missing_ok=True)
+
+
+def recover(collector, http, post, item, destination, max_bytes):
+    ffmpeg,ffprobe=binary('ffmpeg'),binary('ffprobe')
+    urls=list(dict.fromkeys(u for u in item['urls'] if '.m3u8' in urlsplit(u).path))
+    if not urls:raise ArchiveError('没有 HLS 播放列表。',reason='hls_unsupported')
+    anchor=urls[0];asset(anchor)
+    cache=_SegmentCache(collector,http,anchor)
+    cap=max_bytes or 512*1024**2
+    url,stamp,playlist=_select_playlist(collector,cache,urls,anchor)
+    total,sources,local_playlists,expected=_write_tracks(collector,cache,url,stamp,playlist,cap)
+    final,sha,duration=_merge_and_publish(collector,ffmpeg,ffprobe,local_playlists,expected,destination,total)
+    return {'file':final,'sha256':sha,'bytes':final.stat().st_size,'validation_version':VALIDATION_VERSION,
+            'hls':{'playlist':url,'scope':'wayback' if stamp else 'current_public','segments':len(sources),
+                   'duration':duration,'checked_at':now(),'sources':sources,'decoded':True}}

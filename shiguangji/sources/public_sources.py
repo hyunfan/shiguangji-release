@@ -172,6 +172,110 @@ def author_matches(post, author):
     return str(author.get('screen_name', '')).lower() == post.get('username', '').lower()
 
 
+_RESTRICTED_ERROR = "公开接口返回访问限制。"
+_METADATA_ERRORS = {"metadata_too_large", "unexpected_metadata_redirect", "metadata_not_json",
+                    "invalid_metadata_shape", "mirror_api_error"}
+
+
+def _public_sources(pid, handle, enable_mirrors):
+    sources = [("syndication", "https://cdn.syndication.twimg.com/tweet-result?" + urlencode(
+        {"id": pid, "lang": "en", "token": syndication_token(pid)}))]
+    if enable_mirrors:
+        sources.append(("fxtwitter", f"https://api.fxtwitter.com/{handle}/status/{pid}"))
+        sources.append(("vxtwitter", f"https://api.vxtwitter.com/{handle}/status/{pid}"))
+    return sources
+
+
+def _fetch_metadata(url, fetch, check):
+    """Fetch one public JSON resource and reject oversized, redirected or non-JSON answers."""
+    body, meta = fetch(url, MAX_METADATA_BYTES, headers={"Accept": "application/json"})
+    check()
+    if not isinstance(body, bytes) or len(body) > MAX_METADATA_BYTES:
+        raise ValueError("metadata_too_large")
+    meta = _dict(meta)
+    # The caller must restrict all redirect hops. Additionally ensure
+    # the final API resource is still for this exact request/post ID.
+    final = urlsplit(meta.get("url") or url)
+    expected = urlsplit(url)
+    if final.scheme != "https" or final.netloc != expected.netloc or final.path != expected.path or final.query != expected.query:
+        raise ValueError("unexpected_metadata_redirect")
+    content_type = str(meta.get("content_type", "")).lower()
+    if content_type and "json" not in content_type:
+        raise ValueError("metadata_not_json")
+    data = json.loads(body.decode("utf-8-sig"))
+    if not isinstance(data, dict):
+        raise ValueError("invalid_metadata_shape")
+    return data
+
+
+def _source_tweet(source, data):
+    """Return (tweet, status, error) for one source answer; status is '' when usable."""
+    if _restricted(data):
+        return None, "restricted", _RESTRICTED_ERROR
+    if data.get("__typename") == "TweetTombstone" or not data or data.get("code") == 404:
+        return None, "not_found", "公开接口没有可用帖子。"
+    tweet = _dict(data.get("tweet")) if source == "fxtwitter" else data
+    if _restricted(tweet):
+        return None, "restricted", _RESTRICTED_ERROR
+    if source == "fxtwitter" and data.get("code") != 200:
+        raise ValueError("mirror_api_error")
+    if source == 'vxtwitter':
+        if data.get('error'):
+            raise ValueError('mirror_api_error')
+        entries = _list(data.get('media_extended')) + [{'url': u} for u in _list(data.get('mediaURLs'))]
+        tweet = {'id_str': data.get('tweetID'), 'author': {'screen_name': data.get('user_screen_name')},
+                 'url': data.get('tweetURL'), 'text': data.get('text'), 'media': {'all': entries}}
+    return tweet, "", ""
+
+
+def _identity_error(post, pid, tweet, author):
+    if str(tweet.get("id_str") or tweet.get("id") or "") != pid or not author_matches(post, author):
+        return "返回的帖子 ID 或作者与目标不一致，未采用。"
+    if tweet.get("url") and post_id(tweet["url"]) != pid:
+        return "返回的帖子链接与目标不一致，未采用。"
+    return ""
+
+
+def _recover_text(post, tweet, author, source, url, now, pid):
+    text = tweet.get('full_text') or tweet.get('text')
+    if not (isinstance(text, str) and text.strip() and len(text) <= 200000):
+        return
+    from shiguangji.platforms.extractor import GENERIC_DESCRIPTIONS
+    if text.strip().lower() in GENERIC_DESCRIPTIONS:
+        return
+    post.update(text=text.strip(), text_source='public_metadata', content_status='recovered',
+                content_reason='', content_note='', text_provenance={
+                    'source': source, 'url': url, 'scope': 'current_public', 'checked_at': now,
+                    'post_id': pid, 'author_id': str(author.get('id_str') or author.get('id') or author.get('rest_id') or ''),
+                    'username': str(author.get('screen_name') or '')})
+
+
+def _merge_items(found, items, source, url, now):
+    """Add new media keys to found (first source wins) and return this source's keys."""
+    own = set()
+    for item in items:
+        own.add(item["key"])
+        if item["key"] in found:
+            found[item["key"]]["urls"] = list(dict.fromkeys(found[item["key"]]["urls"] + item["urls"]))
+            continue
+        item.update(source=source, evidence_url=url, discovered_at=now, source_kind="current_public")
+        found[item["key"]] = item
+    return own
+
+
+def _record_failure(report, exc):
+    code = getattr(exc, "code", None) or getattr(exc, "status", None)
+    close = getattr(exc, "close", None)
+    if callable(close):
+        close()
+    report.update(status="not_found" if code == 404 else "rate_limited" if code == 429 else "unavailable",
+                  error=f"HTTP {code}" if isinstance(code, int) else type(exc).__name__)
+    if isinstance(exc, ValueError) and str(exc) in _METADATA_ERRORS:
+        report["error"] = str(exc)
+    # Keep diagnostics useful without leaking response bodies, headers,
+    # proxy credentials or unrelated URLs from an exception message.
+
+
 def discover(post, fetch, check, log, enable_mirrors=False, recover_text=False):
     """Return validated media and update post['source_checks'] diagnostics.
 
@@ -187,14 +291,9 @@ def discover(post, fetch, check, log, enable_mirrors=False, recover_text=False):
     checks = post.get("source_checks")
     if not isinstance(checks, dict):
         checks = post["source_checks"] = {}
-    sources = [("syndication", "https://cdn.syndication.twimg.com/tweet-result?" + urlencode(
-        {"id": pid, "lang": "en", "token": syndication_token(pid)}))]
-    if enable_mirrors:
-        sources.append(("fxtwitter", f"https://api.fxtwitter.com/{handle}/status/{pid}"))
-        sources.append(("vxtwitter", f"https://api.vxtwitter.com/{handle}/status/{pid}"))
     found = {}
     gated = post.get("content_reason") == "restricted"
-    for source, url in sources:
+    for source, url in _public_sources(pid, handle, enable_mirrors):
         check()
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         report = {"source": source, "checked_at": now, "evidence_url": url,
@@ -204,87 +303,29 @@ def discover(post, fetch, check, log, enable_mirrors=False, recover_text=False):
             if gated:
                 report.update(status="restricted", error="该帖子存在登录、隐私或年龄限制，已跳过公开来源查询。")
                 continue
-            body, meta = fetch(url, MAX_METADATA_BYTES, headers={"Accept": "application/json"})
-            check()
-            if not isinstance(body, bytes) or len(body) > MAX_METADATA_BYTES:
-                raise ValueError("metadata_too_large")
-            meta = _dict(meta)
-            # The caller must restrict all redirect hops. Additionally ensure
-            # the final API resource is still for this exact request/post ID.
-            final = urlsplit(meta.get("url") or url)
-            expected = urlsplit(url)
-            if final.scheme != "https" or final.netloc != expected.netloc or final.path != expected.path or final.query != expected.query:
-                raise ValueError("unexpected_metadata_redirect")
-            content_type = str(meta.get("content_type", "")).lower()
-            if content_type and "json" not in content_type:
-                raise ValueError("metadata_not_json")
-            data = json.loads(body.decode("utf-8-sig"))
-            if not isinstance(data, dict):
-                raise ValueError("invalid_metadata_shape")
-            if _restricted(data):
-                gated = True
-                report.update(status="restricted", error="公开接口返回访问限制。")
+            tweet, status, error = _source_tweet(source, _fetch_metadata(url, fetch, check))
+            if status:
+                gated = gated or status == "restricted"
+                report.update(status=status, error=error)
                 continue
-            if data.get("__typename") == "TweetTombstone" or not data or data.get("code") == 404:
-                report.update(status="not_found", error="公开接口没有可用帖子。")
-                continue
-            tweet = _dict(data.get("tweet")) if source == "fxtwitter" else data
-            if _restricted(tweet):
-                gated = True
-                report.update(status="restricted", error="公开接口返回访问限制。")
-                continue
-            if source == "fxtwitter" and data.get("code") != 200:
-                raise ValueError("mirror_api_error")
-            if source == 'vxtwitter':
-                if data.get('error'):raise ValueError('mirror_api_error')
-                entries=_list(data.get('media_extended'))+[{'url':u} for u in _list(data.get('mediaURLs'))]
-                tweet={'id_str':data.get('tweetID'),'author':{'screen_name':data.get('user_screen_name')},
-                       'url':data.get('tweetURL'),'text':data.get('text'),'media':{'all':entries}}
             author = _dict(tweet.get("user") if source == "syndication" else tweet.get("author"))
-            if str(tweet.get("id_str") or tweet.get("id") or "") != pid or not author_matches(post, author):
-                report.update(status="identity_mismatch", error="返回的帖子 ID 或作者与目标不一致，未采用。")
-                continue
-            if tweet.get("url") and post_id(tweet["url"]) != pid:
-                report.update(status="identity_mismatch", error="返回的帖子链接与目标不一致，未采用。")
+            error = _identity_error(post, pid, tweet, author)
+            if error:
+                report.update(status="identity_mismatch", error=error)
                 continue
             if recover_text and not post.get('text'):
-                text = tweet.get('full_text') or tweet.get('text')
-                if isinstance(text,str) and text.strip() and len(text)<=200000:
-                    from shiguangji.platforms.extractor import GENERIC_DESCRIPTIONS
-                    if text.strip().lower() not in GENERIC_DESCRIPTIONS:
-                        post.update(text=text.strip(),text_source='public_metadata',content_status='recovered',
-                                    content_reason='',content_note='',text_provenance={
-                                        'source':source,'url':url,'scope':'current_public','checked_at':now,
-                                        'post_id':pid,'author_id':str(author.get('id_str') or author.get('id') or author.get('rest_id') or ''),
-                                        'username':str(author.get('screen_name') or '')})
+                _recover_text(post, tweet, author, source, url, now, pid)
             items = _items(tweet, source, pid, str(author.get('screen_name') or handle).lower())
-            own = set()
-            for item in items:
-                own.add(item["key"])
-                if item["key"] in found:
-                    found[item["key"]]["urls"] = list(dict.fromkeys(found[item["key"]]["urls"] + item["urls"]))
-                    continue
-                item.update(source=source, evidence_url=url, discovered_at=now, source_kind="current_public")
-                found[item["key"]] = item
+            own = _merge_items(found, items, source, url, now)
             report.update(status="found" if own else "no_media", media=len(own))
             if recover_text and post.get('text'):
-                report['text_recovered']=True
+                report['text_recovered'] = True
                 break
         except Exception as exc:
             if type(exc).__name__ in {"Cancelled", "CancelledError"}:
                 raise
             check()
-            code = getattr(exc, "code", None) or getattr(exc, "status", None)
-            close = getattr(exc, "close", None)
-            if callable(close):
-                close()
-            report.update(status="not_found" if code == 404 else "rate_limited" if code == 429 else "unavailable",
-                          error=f"HTTP {code}" if isinstance(code, int) else type(exc).__name__)
-            if isinstance(exc, ValueError) and str(exc) in {"metadata_too_large", "unexpected_metadata_redirect",
-                    "metadata_not_json", "invalid_metadata_shape", "mirror_api_error"}:
-                report["error"] = str(exc)
-            # Keep diagnostics useful without leaking response bodies, headers,
-            # proxy credentials or unrelated URLs from an exception message.
+            _record_failure(report, exc)
         finally:
             log(f"公开媒体来源 {source}：帖子 {pid}，{report['status']}，候选 {report['media']} 项。")
     return list(found.values())

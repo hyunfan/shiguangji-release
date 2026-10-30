@@ -14,6 +14,7 @@
 - 公共函数：重复的 `read_json` / `write_json` 合并到 `shiguangji/core/atomic_io.py`，任务队列改用 `core` 的 `now`；合集文件仍为缩进格式，控制文件仍为紧凑格式。
 - 网络客户端：Wayback 与公开来源客户端相同的停止/预算检查合并为 `shiguangji/sources/cancellation.py` 的 `CancellableClient`。
 - 静态检查：新增 `ruff.toml`，只启用 F（pyflakes）与 B（bugbear）规则，GitHub Actions 新增 ruff 检查任务；清理未使用的导入与变量，对兼容转出、循环内同步调用的闭包和有意保留的异常链做了说明或按文件豁免。ruff 只是开发检查工具，不是运行依赖。
+- 长函数（续）：`hls_recovery.recover` 拆为分片缓存（`_SegmentCache`）、播放列表选择、分轨写入与合并发布；`Collector.download_media` 拆出单项下载、索引变体查找与失败记录；`identity_discovery.discover_aliases` 改由 `_AliasSearch` 管理状态、任务与收尾；`public_sources.discover` 拆出元数据读取、来源解析、身份核对、正文补取与媒体合并。拆分前先补特征测试，行为不变。
 
 ## 1.28.2 · 2026-10-18
 
