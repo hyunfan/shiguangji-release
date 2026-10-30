@@ -105,7 +105,7 @@ Python 测试和独立样例在 `tests/python/`；前端 DOM 行为测试在 `te
 
 `check_publication.py` 将 Git 已跟踪的当前文件复制到临时源码目录，拒绝私有数据路径、链接和越界路径，再扫描源码并构建白名单发布包。验证同时比较包内清单、实际字节和导出源码；便携包额外与固定官方运行时核对。配置文件（含 YAML、TOML、INI 和 `.env.example`）也参加隐私扫描；测试凭据仅豁免指定文件中两条完整虚构网址的摘要。检查规则不能证明没有其他隐私，远程历史及附件仍须单独审查。
 
-`.github/workflows/checks.yml` 使用只读仓库权限和固定提交摘要的 GitHub Actions。Windows 上分别运行 Python 3.10 / 3.14 及前端测试，通过后运行 `check_publication.py --portable --smoke`。工作流只使用合成数据、临时目录和固定官方 Python 下载，不读取真实合集，也不自动发布或升级安装目录。该检查入口、工作流和问题模板属于源码维护工具，不进入程序发布白名单。
+`.github/workflows/checks.yml` 使用只读仓库权限和固定提交摘要的 GitHub Actions。Windows 上分别运行 Python 3.10 / 3.14 及前端测试，通过后运行 `check_publication.py --portable --smoke`。另有一个 Ubuntu 任务用固定版本的 ruff 按 `ruff.toml`（只启用 F 与 B 规则）做静态检查；ruff 只在 CI 安装，不是运行依赖。工作流只使用合成数据、临时目录和固定官方 Python 下载，不读取真实合集，也不自动发布或升级安装目录。该检查入口、工作流和问题模板属于源码维护工具，不进入程序发布白名单。
 
 `shiguangji/core/app_version.py` 是应用版本的唯一来源。`release_files.json` 明确列出发布文件；构建包含 `release.json` 的逐文件摘要，排除合集、运行状态、日志、测试与诊断数据。
 
