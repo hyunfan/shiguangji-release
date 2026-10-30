@@ -11,7 +11,7 @@ from shiguangji.platforms.account_identity import Catalog
 from shiguangji.collect.archive import Collector, Store, Cancelled, export_collection, make_zip
 from shiguangji.storage.collection_lock import collection_lock
 from shiguangji.platforms.extractor import extract
-from shiguangji.platforms.local_aliases import reuse_local_aliases
+from shiguangji.collect.local_aliases import reuse_local_aliases
 from test_account_identity import card
 from test_archive import TS, PNG, FixtureClient
 
@@ -76,7 +76,7 @@ class LocalAliasTests(unittest.TestCase):
         self.assertEqual(runner.budget.requests,0)
         for name,digest in before.items():
             self.assertEqual(hashlib.sha256((source/name).read_bytes()).hexdigest(),digest)
-        with patch('shiguangji.platforms.local_aliases.extract',side_effect=AssertionError('unchanged raw parsed again')):
+        with patch('shiguangji.collect.local_aliases.extract',side_effect=AssertionError('unchanged raw parsed again')):
             again=reuse_local_aliases(runner)
         self.assertEqual((again['checked'],again['cached'],again['reused_files']),(0,1,0))
         self.assertFalse(again['pending'])
@@ -91,7 +91,7 @@ class LocalAliasTests(unittest.TestCase):
         runner.client.text=lambda *_:self.fail('Unexpected network read')
         report=reuse_local_aliases(runner)
         self.assertEqual((report['new_posts'],report['reused_files']),(1,1))
-        with patch('shiguangji.platforms.local_aliases.extract',side_effect=AssertionError('compressed page parsed again')):
+        with patch('shiguangji.collect.local_aliases.extract',side_effect=AssertionError('compressed page parsed again')):
             again=reuse_local_aliases(runner)
         self.assertEqual(again['cached'],1)
 
@@ -118,7 +118,7 @@ class LocalAliasTests(unittest.TestCase):
     def test_current_source_parser_cache_reuses_verified_models_and_still_validates_media(self):
         path=self.source();self.stamp_source_cache(path)
         runner=self.runner()
-        with patch('shiguangji.platforms.local_aliases.extract',side_effect=AssertionError('Unchanged, already parsed source')):
+        with patch('shiguangji.collect.local_aliases.extract',side_effect=AssertionError('Unchanged, already parsed source')):
             result=reuse_local_aliases(runner)
         self.assertEqual((result['new_posts'],result['reused_files']),(1,1))
         item=runner.store.posts()[0]['media'][0]
@@ -135,7 +135,7 @@ class LocalAliasTests(unittest.TestCase):
                     source.db.execute("UPDATE settings SET value='obsolete' WHERE key='parsed_identity'")
                     source.db.commit();source.close()
                 runner=self.runner()
-                with patch('shiguangji.platforms.local_aliases.extract',return_value=[]) as parse:
+                with patch('shiguangji.collect.local_aliases.extract',return_value=[]) as parse:
                     result=reuse_local_aliases(runner)
                 self.assertEqual(result['new_posts'],0)
                 parse.assert_called_once()
@@ -144,7 +144,7 @@ class LocalAliasTests(unittest.TestCase):
     def test_current_cache_never_imports_a_source_model_without_matching_author(self):
         path=self.source(uid='999');self.stamp_source_cache(path)
         runner=self.runner()
-        with patch('shiguangji.platforms.local_aliases.extract',side_effect=AssertionError('Unchanged source cache')):
+        with patch('shiguangji.collect.local_aliases.extract',side_effect=AssertionError('Unchanged source cache')):
             result=reuse_local_aliases(runner)
         self.assertEqual(result['new_posts'],0)
 

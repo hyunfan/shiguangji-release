@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit, urlunsplit, parse_qs, unquote
+from shiguangji.core.archive_urls import original_url  # re-exported for platform/source callers
 
 X_HOSTS = {"twitter.com", "www.twitter.com", "mobile.twitter.com", "m.twitter.com",
            "x.com", "www.x.com", "mobile.x.com", "m.x.com"}
@@ -20,13 +21,6 @@ GENERIC_DESCRIPTIONS = {
     "age-restricted adult content", "sign in to x", "log in to twitter",
     "javascript is not available.",
 }
-
-def original_url(value: str) -> str:
-    value = html.unescape(str(value or "")).replace("\\/", "/").replace("\\u0026", "&")
-    if value.startswith("//"):
-        value = "https:" + value
-    m = re.match(r"^(?:https?://web\.archive\.org)?/web/\d{1,14}[a-z_]*?/(https?://.+)$", value)
-    return m.group(1) if m else value
 
 def username(value: str) -> str:
     value = original_url(value.strip())

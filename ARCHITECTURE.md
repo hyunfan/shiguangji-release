@@ -9,16 +9,20 @@
 | 位置 | 内容 |
 |---|---|
 | 根目录 | 入口：`app.py`（HTTP 服务）、`launcher.py`、`supervisor.py`、`windows_integration.py`、`desktop_launcher.pyw`、`setup_ffmpeg.py`；维护工具：`build_release.py`、`build_portable.py`、`check_publication.py`、`audit_publication.py`、`deploy_release.py`、`verify_portable.py`、`run_tests.py`、`audit_collection.py` |
-| `shiguangji/core/` | 无采集器依赖的公共基础：版本号、原子写入、错误类型、公共函数 |
-| `shiguangji/platforms/` | 平台与账号：输入校验、平台注册、账号身份、旧名发现、本地别名、X / Instagram 内容解析 |
-| `shiguangji/collect/` | 采集编排：X / Instagram 采集、正文补取、缺失原因、运行预算 |
+| `shiguangji/core/` | 无采集器依赖的公共基础：版本号、原子写入、错误类型、存档网址还原（`archive_urls.original_url`）、公共函数 |
+| `shiguangji/platforms/` | 平台与账号：输入校验、平台注册、账号身份、X / Instagram 内容解析 |
+| `shiguangji/collect/` | 采集编排：X / Instagram 采集、旧名发现（`identity_discovery`）、本地旧名合集复用（`local_aliases`）、正文补取、运行预算 |
 | `shiguangji/sources/` | 数据来源：Wayback / 公开来源请求、重试冷却、各来源查询与 Common Crawl 查询计划 |
 | `shiguangji/media/` | 媒体：下载、文件校验、媒体汇总、多源恢复、HLS 合并 |
-| `shiguangji/storage/` | 存储：合集数据库、读取、导出、锁、删除、压缩、空间策略、备份、网盘副本与试读 |
+| `shiguangji/storage/` | 存储：合集数据库、读取、导出（含缺失原因报告）、锁、删除、压缩、空间策略、备份、网盘副本与试读 |
 | `shiguangji/tasks/` | 任务：任务服务、队列与派发、状态与兼容、任务历史、自动续批 |
 | `shiguangji/system/` | 系统与可靠性：防休眠、守护设置与诊断、Windows Shell Link 接口 |
 
 包内模块统一使用绝对导入（`from shiguangji.<层> import 模块` 或 `from shiguangji.<层>.模块 import 名称`）。需要应用根目录的模块使用 `shiguangji.APP_ROOT`，不要用 `Path(__file__).parent` 推算。`cloud_backup.py`、`cloud_media.py` 以自身文件路径启动子进程，`backup_library.py`、`compact_library.py` 可按文件路径运行；这几个模块在以脚本方式运行时会把应用根目录加入 `sys.path`。新增模块时同步更新 `release_files.json`，`tests/python/test_package_layout.py` 会检查根目录与白名单。
+
+### 依赖方向
+
+包之间只允许向下依赖：`core` → `platforms`（纯解析）→ `sources` / `media` / `storage`（同层可互相引用）→ `collect` → `tasks` → 根目录入口（`app.py` 等）。`system` 只依赖 `core`，可被任意层使用；包内模块不导入根目录脚本。`tests/python/test_package_layout.py` 用 `ast` 扫描全部 import（包括函数内的延迟导入）守护这一规则；暂时无法安全修复的已知违规列在该测试的 `KNOWN_VIOLATIONS` 中并注明原因，该名单只能减少，新增违规或已修复但未移除的条目都会让测试失败。
 
 ## 模块边界
 
@@ -50,7 +54,7 @@
 | `shiguangji/storage/storage_policy.py` / `shiguangji/storage/storage_service.py` | 本地空间配置、后台预览和确认清理；只清理可重建的下载 ZIP，清理前重新核对清单和原文件内容 |
 | `shiguangji/storage/cloud_media.py` | 网盘试读恢复包、完整摘要验证、容量受限缓存和使用中保护；所有挂载盘操作在有超时的子进程中完成 |
 
-`shiguangji/collect/archive.py` 保留旧公共名称的导出，方便已有调用者逐步迁移。核心网络和存储模块不再反向导入采集器。
+`shiguangji/collect/archive.py` 保留旧公共名称的导出，方便已有调用者逐步迁移。核心网络和存储模块不再反向导入采集器。`shiguangji/platforms/extractor.py` 继续导出 `original_url`（实现位于 `shiguangji/core/archive_urls.py`），已有调用者无需修改。
 
 ## 状态与数据约束
 
@@ -120,6 +124,6 @@ python deploy_release.py diagnostics/releases/shiguangji-1.28.2.zip --target "C:
 
 ## 1.25 恢复调度
 
-`shiguangji/collect/post_recovery.py` 对已有 X 帖子执行有界正文补取，复用公开来源身份检查并保存 provenance；`shiguangji/collect/recovery_report.py` 只按快照实际状态分类缺失原因。`shiguangji/media/hls_recovery.py` 负责同视频 HTTPS 分片约束、摘要缓存、全量分片下载、本地合并/解码与原子发布，禁止 FFmpeg 联网，不处理加密内容。中断时不得把部分视频计为恢复成功。
+`shiguangji/collect/post_recovery.py` 对已有 X 帖子执行有界正文补取，复用公开来源身份检查并保存 provenance；`shiguangji/storage/recovery_report.py`（导出时调用的纯函数）只按快照实际状态分类缺失原因。`shiguangji/media/hls_recovery.py` 负责同视频 HTTPS 分片约束、摘要缓存、全量分片下载、本地合并/解码与原子发布，禁止 FFmpeg 联网，不处理加密内容。中断时不得把部分视频计为恢复成功。
 
 `AutoBatches` 将无请求的来源冷却与无进展区分。`TaskQueue` 持久化 next_retry_at / retry_rounds / retry_started，最多 3 轮、48 小时，原有模式保留；等待项让出队列。`TaskService` 在后台空闲时通过可取消定时器检查到期任务，调用原派发路径。暂停/关闭/重启不擅自恢复；定时器启动错误使队列暂停并保留原因。会话增量与累计请求写入 automatic，而原 counts 继续表示合集存量。

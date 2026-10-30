@@ -581,9 +581,9 @@ class Collector:
             self.progress(stage='repair', completed=0, total=0)
             self.repair_cache()
             if self.options.get('mode', 'full') in {'full', 'discover'}:
-                from shiguangji.platforms.identity_discovery import discover_aliases
+                from shiguangji.collect.identity_discovery import discover_aliases
                 discover_aliases(self)
-            from shiguangji.platforms.local_aliases import reuse_local_aliases
+            from shiguangji.collect.local_aliases import reuse_local_aliases
             reuse_local_aliases(self)
             if self.options.get("mode") not in {"repair","rescue"}:
                 if self.options.get('_skip_index') and not self.identity_pending():

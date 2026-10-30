@@ -7,6 +7,7 @@
 - 发布白名单、便携包导入检查同步覆盖新包；新增包结构守护测试。
 - 本地服务：令牌含非 ASCII 字符时返回 403，不再断开连接；POST 处理增加兜底，未预期错误返回通用 500 并写入日志。
 - 升级：`deploy_release.py` 按上一版 `release.json`（老安装按旧模块名单）备份并删除新版不再包含的程序文件，避免从 1.28.2 升级后根目录残留旧模块；失败时自动恢复，用户数据与运行环境不在清理范围内。
+- 依赖方向：`original_url` 下沉到 `shiguangji/core/archive_urls.py`（`platforms.extractor` 继续导出），`core` 不再依赖 `platforms`；`identity_discovery`、`local_aliases` 移入 `collect`，`recovery_report` 移入 `storage`；新增基于 `ast` 的依赖方向守护测试，暂不修复的 3 处已知违规列入只减不增的名单。
 
 ## 1.28.2 · 2026-10-18
 

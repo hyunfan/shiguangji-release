@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 from shiguangji.sources.public_sources import discover
 from shiguangji.platforms.extractor import blank_post,merge_post
-from shiguangji.collect.recovery_report import report
+from shiguangji.storage.recovery_report import report
 
 
 class PostRecoveryTests(unittest.TestCase):

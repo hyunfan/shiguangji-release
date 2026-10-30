@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from shiguangji.platforms.account_identity import search_handles
 from shiguangji.collect.archive import ArchiveError, Cancelled, Client, Collector
-from shiguangji.platforms.identity_discovery import discover_aliases, endpoints, profile_pairs, same_endpoint
+from shiguangji.collect.identity_discovery import discover_aliases, endpoints, profile_pairs, same_endpoint
 from test_archive import FixtureClient
 
 TS = '20200102030405'

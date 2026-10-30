@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from shiguangji import APP_ROOT
 from shiguangji.core.atomic_io import atomic_write_text
-from shiguangji.platforms.extractor import original_url
+from shiguangji.core.archive_urls import original_url
 ROOT = APP_ROOT
 DATA = ROOT / "collections"
 CDX = "https://web.archive.org/cdx/search/cdx"

@@ -56,7 +56,7 @@ def export_collection(store, status, errors, full=True, run_info=None):
     from shiguangji.tasks.task_status import summary
     last = manifest['last_run']
     counts['text_recovery_pending'] = int(last.get('post_recovery',{}).get('pending',0))
-    from shiguangji.collect.recovery_report import report
+    from shiguangji.storage.recovery_report import report
     manifest['recovery_report'] = report(posts,store.db.execute('SELECT original,status FROM captures'))
     counts.update({k: last['scope'][k] for k in ('identity_pending', 'alias_search_pending', 'local_alias_pending')
                    if k in last.get('scope', {})})
