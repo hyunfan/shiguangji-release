@@ -2,9 +2,9 @@
 import tempfile
 import unittest
 from unittest.mock import Mock
-from archive import ArchiveError
-from media_recovery import RecoveryEngine
-from source_http import SourceError
+from shiguangji.collect.archive import ArchiveError
+from shiguangji.media.media_recovery import RecoveryEngine
+from shiguangji.sources.source_http import SourceError
 from test_media_recovery import FixtureCollector, FixtureHTTP, FixtureCC, post_with, no_discovery, IMAGE_URL
 
 

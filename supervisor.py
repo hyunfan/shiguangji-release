@@ -6,9 +6,9 @@ import json
 import os
 from pathlib import Path
 import time
-from atomic_io import atomic_write_text
+from shiguangji.core.atomic_io import atomic_write_text
 from launcher import launch_lock, read_state, runtime, start_background
-from reliability import settings
+from shiguangji.system.reliability import settings
 
 
 class ProcessReference:

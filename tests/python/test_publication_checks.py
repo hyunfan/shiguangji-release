@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from app_version import VERSION
+from shiguangji.core.app_version import VERSION
 from check_publication import PublicationError, export_tracked, verify_package, check
 
 

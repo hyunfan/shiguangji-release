@@ -8,16 +8,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock,patch
 from urllib.parse import urlsplit
-from hls_recovery import parse_playlist, recover, run_tool, binary
-from core_errors import ArchiveError
+from shiguangji.media.hls_recovery import parse_playlist, recover, run_tool, binary
+from shiguangji.core.core_errors import ArchiveError
 
 URL='https://video.twimg.com/ext_tw_video/123/pu/pl/video.m3u8'
 
 
 class HlsTests(unittest.TestCase):
     def test_exact_video_mp4_fallback_precedes_hls_merge(self):
-        from media_recovery import RecoveryEngine
-        from extractor import blank_post,media_item
+        from shiguangji.media.media_recovery import RecoveryEngine
+        from shiguangji.platforms.extractor import blank_post,media_item
         with tempfile.TemporaryDirectory() as d:
             c=SimpleNamespace(folder=Path(d),stop=None,options={},log=lambda _:None,saved_file_valid=lambda _:False)
             good=media_item('https://video.twimg.com/ext_tw_video/123/pu/vid/720x720/good.mp4')
@@ -28,7 +28,7 @@ class HlsTests(unittest.TestCase):
                 self.assertEqual([u for u,_ in candidates],good['urls'])
                 target.update(status='saved',path='media/good.mp4');return True
             engine.direct=direct
-            with patch('hls_recovery.recover',side_effect=AssertionError('MP4 already recovered')):
+            with patch('shiguangji.media.hls_recovery.recover',side_effect=AssertionError('MP4 already recovered')):
                 engine.hls(p,m)
             self.assertEqual((m['kind'],m['status']),('video','saved'))
 

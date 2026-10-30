@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 import deploy_release
-from atomic_io import atomic_write_bytes
+from shiguangji.core.atomic_io import atomic_write_bytes
 
 
 class ReleaseTests(unittest.TestCase):

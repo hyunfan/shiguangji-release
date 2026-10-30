@@ -10,13 +10,13 @@ import unittest
 import zipfile
 from unittest.mock import patch
 
-from collection_export import export_collection, make_zip
-from core_errors import Cancelled
-from collection_lock import collection_lock
-from collection_store import Store
-from extractor import blank_post
-from instagram_archive import InstagramCollector
-from media_files import saved_file_valid
+from shiguangji.storage.collection_export import export_collection, make_zip
+from shiguangji.core.core_errors import Cancelled
+from shiguangji.storage.collection_lock import collection_lock
+from shiguangji.storage.collection_store import Store
+from shiguangji.platforms.extractor import blank_post
+from shiguangji.collect.instagram_archive import InstagramCollector
+from shiguangji.media.media_files import saved_file_valid
 from test_instagram import FakeArchive
 from test_media_fixtures import VIDEO
 
@@ -79,7 +79,7 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(calls, 3)
 
     def test_failed_zip_keeps_previous_package_without_marking_it_current(self):
-        from collection_export import zip_is_current
+        from shiguangji.storage.collection_export import zip_is_current
         store = Store(self.base / 'alice', 'alice')
         self.addCleanup(store.close)
         post = blank_post('1234567890', 'alice')
@@ -132,7 +132,7 @@ class ReviewRegressions(unittest.TestCase):
                 owners = []
                 def checked(status, full=True):
                     if full:
-                        from collection_lock import collection_is_busy
+                        from shiguangji.storage.collection_lock import collection_is_busy
                         thread = threading.Thread(target=lambda: owners.append(collection_is_busy(collector.folder)))
                         thread.start(); thread.join(5)
                     return checkpoint(status, full)

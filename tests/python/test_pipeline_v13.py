@@ -9,9 +9,9 @@ import threading
 import unittest
 from unittest.mock import patch
 
-import archive
-from archive import Cancelled, Collector, Store
-from collection_lock import CollectionBusy, collection_is_busy, collection_lock
+from shiguangji.collect import archive
+from shiguangji.collect.archive import Cancelled, Collector, Store
+from shiguangji.storage.collection_lock import CollectionBusy, collection_is_busy, collection_lock
 from test_archive import FixtureClient, HTML, PID, TS, URL
 
 
@@ -116,7 +116,7 @@ class PipelineTests(unittest.TestCase):
 
 class LockTests(unittest.TestCase):
     def child(self, folder, crash=False):
-        source = 'import os,sys;from collection_lock import collection_lock,CollectionBusy\ntry:\n with collection_lock(sys.argv[1]):\n  '+('os._exit(0)' if crash else 'pass')+'\nexcept CollectionBusy:\n sys.exit(7)\n'
+        source = 'import os,sys;from shiguangji.storage.collection_lock import collection_lock,CollectionBusy\ntry:\n with collection_lock(sys.argv[1]):\n  '+('os._exit(0)' if crash else 'pass')+'\nexcept CollectionBusy:\n sys.exit(7)\n'
         return subprocess.run([sys.executable, '-c', source, str(folder)], cwd=Path(__file__).resolve().parents[2], capture_output=True, timeout=10)
     def test_lock_reentrant_and_other_thread_cannot_write(self):
         with tempfile.TemporaryDirectory() as d:

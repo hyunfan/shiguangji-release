@@ -15,31 +15,31 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote, parse_qs
 from urllib.request import build_opener, ProxyHandler
-from archive import Collector
-from archive_support import ROOT, DATA
-from collection_export import make_zip, zip_is_current
-from platform_registry import platform_for
-from collection_lock import CollectionBusy, collection_lock
-from platform_accounts import collection_key as username, account_input, account_info, is_instagram
-from instagram_archive import InstagramCollector
-from instagram_extract import post_links
-from account_identity import Catalog
-from collection_delete import delete_collection
-from power_guard import prevent_idle_sleep
+from shiguangji.collect.archive import Collector
+from shiguangji.core.archive_support import ROOT, DATA
+from shiguangji.storage.collection_export import make_zip, zip_is_current
+from shiguangji.platforms.platform_registry import platform_for
+from shiguangji.storage.collection_lock import CollectionBusy, collection_lock
+from shiguangji.platforms.platform_accounts import collection_key as username, account_input, account_info, is_instagram
+from shiguangji.collect.instagram_archive import InstagramCollector
+from shiguangji.platforms.instagram_extract import post_links
+from shiguangji.platforms.account_identity import Catalog
+from shiguangji.storage.collection_delete import delete_collection
+from shiguangji.system.power_guard import prevent_idle_sleep
 from windows_integration import protocol_available
-from task_status import summary as task_summary, collection_summary
-from task_queue import parse_handles, OPEN as QUEUE_OPEN
+from shiguangji.tasks.task_status import summary as task_summary, collection_summary
+from shiguangji.tasks.task_queue import parse_handles, OPEN as QUEUE_OPEN
 
-from app_version import VERSION
-from collection_reader import read_summary, read_document, post_page
+from shiguangji.core.app_version import VERSION
+from shiguangji.storage.collection_reader import read_summary, read_document, post_page
 
-from task_service import TaskService, SLEEP_MESSAGES
-from reliability import settings as reliability_settings, save_settings
-from storage_guard import StorageLow
-from cloud_backup import CloudBackup
-from storage_service import StorageService
-from storage_policy import settings as storage_settings
-from cloud_media import open_media
+from shiguangji.tasks.task_service import TaskService, SLEEP_MESSAGES
+from shiguangji.system.reliability import settings as reliability_settings, save_settings
+from shiguangji.storage.storage_guard import StorageLow
+from shiguangji.storage.cloud_backup import CloudBackup
+from shiguangji.storage.storage_service import StorageService
+from shiguangji.storage.storage_policy import settings as storage_settings
+from shiguangji.storage.cloud_media import open_media
 
 TOKEN = secrets.token_urlsafe(32)
 CLOUD = None
@@ -520,7 +520,7 @@ def main():
         open_browser(url)
     if args.background_token:
         import sys
-        from storage_guard import RotatingTextLog
+        from shiguangji.storage.storage_guard import RotatingTextLog
         sys.stderr = RotatingTextLog(ROOT/'runtime'/f'http-{args.port}.log')
         from launcher import background_ready, monitor_stop
         background_ready(ROOT, args.port, args.background_token)

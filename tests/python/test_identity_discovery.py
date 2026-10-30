@@ -8,9 +8,9 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-from account_identity import search_handles
-from archive import ArchiveError, Cancelled, Client, Collector
-from identity_discovery import discover_aliases, endpoints, profile_pairs, same_endpoint
+from shiguangji.platforms.account_identity import search_handles
+from shiguangji.collect.archive import ArchiveError, Cancelled, Client, Collector
+from shiguangji.platforms.identity_discovery import discover_aliases, endpoints, profile_pairs, same_endpoint
 from test_archive import FixtureClient
 
 TS = '20200102030405'
@@ -204,7 +204,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_public_disabled_never_constructs_mirror_transport(self):
         runner = self.runner(); self.anchor(runner)
-        with patch('source_http.SourceClient') as source:
+        with patch('shiguangji.sources.source_http.SourceClient') as source:
             self.finish(runner)
         source.assert_not_called()
 
@@ -257,7 +257,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(manifest['posts'][0]['username'], 'oldalice')
 
     def test_deleting_collection_clears_network_checks_for_fresh_readdition(self):
-        from collection_delete import delete_collection
+        from shiguangji.storage.collection_delete import delete_collection
         runner = self.runner()
         self.finish(runner)
         runner.store.close(); runner.identities.close()

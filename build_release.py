@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import zipfile
-from app_version import VERSION
+from shiguangji.core.app_version import VERSION
 
 ROOT=Path(__file__).resolve().parent
 

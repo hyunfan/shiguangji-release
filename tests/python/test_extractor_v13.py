@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from extractor import blank_post, extract, media_item, merge_post
+from shiguangji.platforms.extractor import blank_post, extract, media_item, merge_post
 
 
 PID = "1346889436626259968"

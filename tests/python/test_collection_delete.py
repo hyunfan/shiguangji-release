@@ -10,9 +10,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-import task_service
-from collection_delete import delete_collection
-from collection_lock import collection_lock, CollectionBusy
+from shiguangji.tasks import task_service
+from shiguangji.storage.collection_delete import delete_collection
+from shiguangji.storage.collection_lock import collection_lock, CollectionBusy
 
 
 def fixture(base, handle):
@@ -113,7 +113,7 @@ class DeleteHTTPTests(unittest.TestCase):
         self.assertTrue((self.root/'bob/manifest.json').exists())
         self.assertFalse((self.root/'alice/manifest.json').exists())
     def test_file_lock_error_is_reported_without_claiming_success_or_forgetting_the_account(self):
-        with patch('collection_delete.shutil.rmtree', side_effect=PermissionError('fixture file lock')):
+        with patch('shiguangji.storage.collection_delete.shutil.rmtree', side_effect=PermissionError('fixture file lock')):
             status, result = self.post({'username': 'alice', 'confirm_username': 'alice'})
         self.assertEqual(status, 409)
         self.assertIn('删除未完成', result['error'])

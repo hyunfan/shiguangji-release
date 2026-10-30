@@ -8,13 +8,13 @@ import unittest
 from unittest.mock import patch
 
 import app
-from collection_export import export_collection
-from collection_store import Store
-from extractor import blank_post
-from job_state import write_job
-from task_history import TaskHistory
-from task_queue import TaskQueue
-from task_service import TaskService
+from shiguangji.storage.collection_export import export_collection
+from shiguangji.storage.collection_store import Store
+from shiguangji.platforms.extractor import blank_post
+from shiguangji.tasks.job_state import write_job
+from shiguangji.tasks.task_history import TaskHistory
+from shiguangji.tasks.task_queue import TaskQueue
+from shiguangji.tasks.task_service import TaskService
 
 
 class HistoryTests(unittest.TestCase):
@@ -83,7 +83,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_retry_preserves_task_mode_and_options_but_uses_current_proxy(self):
         self.add(mode='discover', multi_source=False, max_pages=77, public_mirrors=False)
-        with patch('task_service.threading.Thread'), patch.object(self.service,'start',wraps=self.service.start) as start:
+        with patch('shiguangji.tasks.task_service.threading.Thread'), patch.object(self.service,'start',wraps=self.service.start) as start:
             self.service.retry_history('first', app.collect_options({'proxy':'http://127.0.0.1:4567','max_pages':9}))
         handle, options = start.call_args.args
         self.assertEqual(handle,'alice');self.assertEqual(options['mode'],'discover')
@@ -93,7 +93,7 @@ class HistoryTests(unittest.TestCase):
     def test_retry_paused_account_does_not_resume_unrelated_queue_items(self):
         self.add()
         queue=self.service.task_queue();queue.add(['alice','bob'],{});queue.pause()
-        with patch('task_service.threading.Thread'):
+        with patch('shiguangji.tasks.task_service.threading.Thread'):
             self.service.retry_history('first',app.collect_options({}))
         self.assertEqual(queue.data['state'],'paused')
         self.assertEqual([i['state'] for i in queue.data['items']],['running','pending'])
@@ -115,7 +115,7 @@ class HistoryTests(unittest.TestCase):
     def test_narrow_retry_does_not_consume_a_queued_full_archive(self):
         self.add(mode='discover')
         queue=self.service.task_queue();queue.add(['alice'],{});queue.pause()
-        with patch('task_service.threading.Thread'):
+        with patch('shiguangji.tasks.task_service.threading.Thread'):
             self.service.retry_history('first',app.collect_options({}))
         self.assertEqual(queue.data['items'][0]['state'],'pending')
         self.assertEqual(queue.data['state'],'paused')
@@ -136,7 +136,7 @@ class HistoryTests(unittest.TestCase):
         try: export_collection(store,'partial',[])
         finally: store.close()
         self.history.finish(dict(username='alice',run_id='first',status='failed',running=False,task_summary={'schema_version':1,'state':'failed','reason':'zip_failed'}))
-        with patch('task_service.threading.Thread'), patch.object(self.service,'start',wraps=self.service.start) as start:
+        with patch('shiguangji.tasks.task_service.threading.Thread'), patch.object(self.service,'start',wraps=self.service.start) as start:
             self.service.retry_history('first',{})
         self.assertTrue(start.call_args.kwargs['zip_only'])
 
@@ -147,7 +147,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_corrupted_history_is_preserved_and_does_not_start_work(self):
         self.history.path.write_bytes(b'corrupted history')
-        with patch('task_service.threading.Thread') as thread:
+        with patch('shiguangji.tasks.task_service.threading.Thread') as thread:
             with self.assertRaises(OSError):self.service.start('alice',{})
             thread.assert_not_called()
         self.assertFalse(self.service.job['running'])
@@ -155,14 +155,14 @@ class HistoryTests(unittest.TestCase):
 
     def test_queue_prepare_failure_is_recorded_even_after_history_was_opened(self):
         queue=self.service.task_queue();queue.add(['alice'],{})
-        with patch('task_service.canonical_handle',side_effect=ValueError('conflict')):
+        with patch('shiguangji.tasks.task_service.canonical_handle',side_effect=ValueError('conflict')):
             self.service.advance_queue()
         self.assertEqual(self.history.search({'state':'failed'})['total'],1)
 
     def test_identity_read_failure_does_not_lose_outcome_or_known_aliases(self):
         job = self.add()
         self.service.job.update(job, status='failed', running=False)
-        with patch('task_service.platform_for') as platform:
+        with patch('shiguangji.tasks.task_service.platform_for') as platform:
             platform.return_value.identity.side_effect = OSError('temporarily unavailable')
             self.service.save_history_result()
         item = self.history.search({'q':'oldalice'})['items'][0]

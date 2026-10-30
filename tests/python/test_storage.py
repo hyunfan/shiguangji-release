@@ -9,8 +9,8 @@ import threading
 import unittest
 from unittest.mock import patch
 
-import archive
-import atomic_io
+from shiguangji.collect import archive
+from shiguangji.core import atomic_io
 from test_archive import FixtureClient
 
 
@@ -33,7 +33,7 @@ class AtomicStorageTests(unittest.TestCase):
                     self.assertEqual(json.loads(path.read_text()), {'old': True})
                     raise locked((5, 32, 33)[len(attempts)-1])
                 real_replace(source, target)
-            with patch('atomic_io.os.replace', side_effect=replace), patch('atomic_io.time.sleep'):
+            with patch('shiguangji.core.atomic_io.os.replace', side_effect=replace), patch('shiguangji.core.atomic_io.time.sleep'):
                 archive.write_json(path, {'text': '图片与视频'})
             self.assertEqual(json.loads(path.read_text(encoding='utf-8')), {'text': '图片与视频'})
             self.assertEqual(len(attempts), 4)
@@ -43,7 +43,7 @@ class AtomicStorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'data.js'
             path.write_bytes(b'old')
-            with patch('atomic_io.os.replace', side_effect=locked()) as replace, patch('atomic_io.time.sleep'):
+            with patch('shiguangji.core.atomic_io.os.replace', side_effect=locked()) as replace, patch('shiguangji.core.atomic_io.time.sleep'):
                 with self.assertRaises(PermissionError):
                     atomic_io.atomic_write_bytes(path, b'new')
             self.assertEqual(replace.call_count, 11)
@@ -54,7 +54,7 @@ class AtomicStorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'data.js'
             path.write_bytes(b'old')
-            with patch('atomic_io.os.replace', side_effect=OSError(errno.ENOSPC, 'disk full')) as replace, patch('atomic_io.time.sleep') as sleep:
+            with patch('shiguangji.core.atomic_io.os.replace', side_effect=OSError(errno.ENOSPC, 'disk full')) as replace, patch('shiguangji.core.atomic_io.time.sleep') as sleep:
                 with self.assertRaises(OSError):
                     atomic_io.atomic_write_bytes(path, b'new')
             replace.assert_called_once()
@@ -94,7 +94,7 @@ class AtomicStorageTests(unittest.TestCase):
                 if status == 'running':
                     raise locked()
                 return original(store, status, *args, **kwargs)
-            with patch('archive.export_collection', side_effect=export):
+            with patch('shiguangji.collect.archive.export_collection', side_effect=export):
                 result = archive.Collector('alice', base=base, client=FixtureClient()).run()
             manifest = json.loads((base/'alice'/'manifest.json').read_text(encoding='utf-8'))
             self.assertEqual(result, 'complete')
@@ -105,7 +105,7 @@ class AtomicStorageTests(unittest.TestCase):
     def test_final_export_failure_is_not_reported_as_success(self):
         with tempfile.TemporaryDirectory() as folder:
             collector = archive.Collector('alice', base=Path(folder), client=FixtureClient())
-            with patch('archive.export_collection', side_effect=locked()):
+            with patch('shiguangji.collect.archive.export_collection', side_effect=locked()):
                 with self.assertRaises(PermissionError):
                     collector.run()
 
@@ -113,7 +113,7 @@ class AtomicStorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'gallery.js'
             atomic_io.publish_if_changed(path, b'one')
-            with patch('atomic_io.replace_file') as replace:
+            with patch('shiguangji.core.atomic_io.replace_file') as replace:
                 atomic_io.publish_if_changed(path, b'one')
                 replace.assert_not_called()
 

@@ -68,7 +68,7 @@ db.execute('insert into probe values (?)', ('中文数据',)); db.commit(); db.c
 db = sqlite3.connect(root/'runtime/portable-probe.sqlite')
 assert db.execute('select value from probe').fetchone()[0] == '中文数据'
 db.close()
-from task_history import TaskHistory
+from shiguangji.tasks.task_history import TaskHistory
 history = TaskHistory(root/'collections')
 history.begin({'username':'portabletest', 'run_id':'portable-history', 'status':'running', 'running':True}, {})
 history.finish({'username':'portabletest', 'run_id':'portable-history', 'status':'failed', 'running':False})

@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-import task_service
-from auto_batches import AutoBatches
+from shiguangji.tasks import task_service
+from shiguangji.tasks.auto_batches import AutoBatches
 
 
 LIMIT = {'stop_code': 'request_limit', 'new_files': 0}

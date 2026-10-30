@@ -11,7 +11,7 @@ from pathlib import Path
 import urllib.request
 import zipfile
 
-from app_version import VERSION
+from shiguangji.core.app_version import VERSION
 from build_release import ROOT, application_files, write_package
 
 MAX_DOWNLOAD = 64 * 1024 * 1024

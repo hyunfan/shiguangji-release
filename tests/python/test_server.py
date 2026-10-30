@@ -9,12 +9,12 @@ from pathlib import Path
 from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 import app
-from archive import Collector, make_zip
+from shiguangji.collect.archive import Collector, make_zip
 from test_archive import FixtureClient
 
 class ServerTests(unittest.TestCase):
     def test_storage_settings_require_token_and_never_start_collection(self):
-        from storage_policy import settings,save_settings
+        from shiguangji.storage.storage_policy import settings,save_settings
         old=settings(self.folder)
         try:
             body=json.dumps({'zip_on_demand':False,'cache_gb':1})
@@ -28,7 +28,7 @@ class ServerTests(unittest.TestCase):
         finally:save_settings(self.folder,old)
 
     def test_cloud_configuration_is_authenticated_and_does_not_start_collection(self):
-        from cloud_backup import CloudBackup
+        from shiguangji.storage.cloud_backup import CloudBackup
         service = CloudBackup(self.folder)
         body = json.dumps({'enabled':True,'destination':str(self.folder.parent/'cloud-backup-test')})
         headers = {'X-Local-Token':app.TOKEN,'Content-Type':'application/json'}
@@ -212,9 +212,9 @@ class ServerTests(unittest.TestCase):
             path.write_bytes(previous)
 
     def test_collection_identity_is_live_even_when_manifest_was_exported_before_alias_evidence(self):
-        from account_identity import Catalog
-        from archive import Store, export_collection
-        from extractor import blank_post
+        from shiguangji.platforms.account_identity import Catalog
+        from shiguangji.collect.archive import Store, export_collection
+        from shiguangji.platforms.extractor import blank_post
         with tempfile.TemporaryDirectory(dir=self.folder) as temp, patch.object(app.TASKS, 'base',Path(temp)):
             base=Path(temp)
             store=Store(base/'newname','newname')

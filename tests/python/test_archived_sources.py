@@ -3,8 +3,8 @@ import json
 import unittest
 from urllib.parse import parse_qs, quote, urlsplit
 
-from archive import Cancelled
-from archived_sources import ArchivedSources, CDX, decoded_media_urls, endpoint_kind, query_plans
+from shiguangji.collect.archive import Cancelled
+from shiguangji.sources.archived_sources import ArchivedSources, CDX, decoded_media_urls, endpoint_kind, query_plans
 
 # Synthetic future snowflakes; never copy identifiers from real collections.
 PID = "9000000000000000001"

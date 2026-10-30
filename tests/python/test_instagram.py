@@ -9,12 +9,12 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 import app
-from archive import Store, export_collection, make_zip, ArchiveError, validate_replay_target, replay
-from instagram_archive import InstagramCollector
-from instagram_extract import extract, blank_post, media_item, post_links
-from platform_accounts import account_input, collection_key
-from task_queue import TaskQueue, parse_handles
-from collection_delete import delete_collection
+from shiguangji.collect.archive import Store, export_collection, make_zip, ArchiveError, validate_replay_target, replay
+from shiguangji.collect.instagram_archive import InstagramCollector
+from shiguangji.platforms.instagram_extract import extract, blank_post, media_item, post_links
+from shiguangji.platforms.platform_accounts import account_input, collection_key
+from shiguangji.tasks.task_queue import TaskQueue, parse_handles
+from shiguangji.storage.collection_delete import delete_collection
 
 TS='20200101000000'
 CDN='https://scontent.cdninstagram.com/v/t51.2885-15/photo.jpg?sig=one'
@@ -89,7 +89,7 @@ class FakeArchive:
     def __init__(self,fail=False,stop=None):self.calls=[];self.fail=fail;self.stop=stop
     def check(self):
         if self.stop and self.stop.is_set():
-            from archive import Cancelled
+            from shiguangji.collect.archive import Cancelled
             raise Cancelled()
     def cdx_pages(self,url,match='exact',resume=''):
         self.check();self.calls.append(url)
@@ -128,8 +128,8 @@ class InstagramArchiveTests(unittest.TestCase):
             self.assertEqual(json.loads(z.read(self.key+'/manifest.json'))['counts']['saved'],1)
     def test_new_pages_compress_and_resume_from_cache_without_network(self):
         import sqlite3
-        import compressed_files as raw_files
-        from backup_library import backup_collection,restore_backup,digest
+        from shiguangji.storage import compressed_files as raw_files
+        from shiguangji.storage.backup_library import backup_collection,restore_backup,digest
         client=FakeArchive()
         content=page({'graphql':{'shortcode_media':post(caption='Archived caption '*200)}})
         client.text=lambda url:content
@@ -156,7 +156,7 @@ class InstagramArchiveTests(unittest.TestCase):
                 self.assertEqual(digest(restored/relative),record['sha256'])
     def test_corrupt_compressed_page_is_refetched_and_replaced(self):
         import sqlite3
-        import compressed_files as raw_files
+        from shiguangji.storage import compressed_files as raw_files
         client=FakeArchive();self.run_collection(client)
         raw=next(raw_files.logical_files(self.base/self.key/'raw'))
         raw_files.packed_path(raw).write_bytes(b'bad gzip');raw.unlink(missing_ok=True)

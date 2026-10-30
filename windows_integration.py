@@ -114,7 +114,7 @@ def special_folder(name):
 
 
 def _shortcut(operation, path, values=None):
-    from windows_shortcuts import shortcut
+    from shiguangji.system.windows_shortcuts import shortcut
     return shortcut(operation, path, values)
 
 

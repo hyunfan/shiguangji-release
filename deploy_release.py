@@ -14,7 +14,7 @@ import sys
 import time
 from urllib.request import build_opener, ProxyHandler
 import zipfile
-from atomic_io import atomic_write_bytes
+from shiguangji.core.atomic_io import atomic_write_bytes
 
 
 def health(port):

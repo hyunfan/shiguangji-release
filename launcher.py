@@ -14,7 +14,7 @@ import time
 import uuid
 import webbrowser
 from urllib.request import build_opener, ProxyHandler
-from atomic_io import atomic_write_text
+from shiguangji.core.atomic_io import atomic_write_text
 
 ROOT = Path(__file__).resolve().parent
 
@@ -168,7 +168,7 @@ def spawn_server(root, port, session, recovery_run=''):
     else:
         options["start_new_session"] = True
     log_path = runtime(root) / f"server-{port}.log"
-    from storage_guard import rotate_log
+    from shiguangji.storage.storage_guard import rotate_log
     rotate_log(log_path)
     with log_path.open("ab", buffering=0) as log:
         log.write(f"\n--- Launch {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n".encode("utf-8"))

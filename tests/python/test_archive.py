@@ -9,8 +9,8 @@ from pathlib import Path
 from email.message import Message
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
-from archive import Client, ArchiveError, Cancelled, Collector, Store, parse_cdx, media_extension, make_zip, replay, export_collection, validate_replay_target, archive_only
-from extractor import extract, username, post_id, media_item, snowflake_date, blank_post, merge_post
+from shiguangji.collect.archive import Client, ArchiveError, Cancelled, Collector, Store, parse_cdx, media_extension, make_zip, replay, export_collection, validate_replay_target, archive_only
+from shiguangji.platforms.extractor import extract, username, post_id, media_item, snowflake_date, blank_post, merge_post
 
 PID = '1346889436626259968'
 URL = f'https://twitter.com/alice/status/{PID}'

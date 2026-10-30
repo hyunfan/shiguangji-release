@@ -6,9 +6,9 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
-from account_identity import Catalog, observations, search_handles
-from archive import Collector, Store, export_collection, make_zip
-from extractor import extract, blank_post
+from shiguangji.platforms.account_identity import Catalog, observations, search_handles
+from shiguangji.collect.archive import Collector, Store, export_collection, make_zip
+from shiguangji.platforms.extractor import extract, blank_post
 from test_archive import FixtureClient, TS, PNG
 
 
@@ -45,7 +45,7 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(search_handles(self.catalog.snapshot('alice')),['alice'])
 
     def test_recycled_name_never_redirects_typed_input_to_a_different_owner(self):
-        from account_identity import canonical_handle
+        from shiguangji.platforms.account_identity import canonical_handle
         self.record('alice','123');self.record('oldalice','123');self.record('oldalice','999','new-owner')
         (self.base/'alice').mkdir()
         (self.base/'alice/manifest.json').write_text('{}')
@@ -153,7 +153,7 @@ class IdentityTests(unittest.TestCase):
         self.assertFalse((self.base/'alice').exists())
 
     def test_typing_known_old_name_reuses_existing_collection(self):
-        from account_identity import canonical_handle
+        from shiguangji.platforms.account_identity import canonical_handle
         self.record('alice','123');self.record('oldalice','123')
         (self.base/'alice').mkdir()
         (self.base/'alice/manifest.json').write_text('{}')
@@ -266,7 +266,7 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(runner.run(),'paused')
 
     def test_delete_removes_catalog_evidence_and_choices(self):
-        from collection_delete import delete_collection
+        from shiguangji.storage.collection_delete import delete_collection
         (self.base/'alice').mkdir()
         self.record('alice','123')
         self.catalog.choice('alice','oldalice','candidate')
