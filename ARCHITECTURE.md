@@ -108,13 +108,13 @@ Windows x64 便携包使用 `python build_portable.py` 构建；首次下载 `py
 python deploy_release.py diagnostics/releases/shiguangji-1.28.2.zip --target "C:\实际安装目录" --backup-root diagnostics/deploy-backups --port 8766
 ```
 
-从 1.28.2 及更早版本（模块平铺在根目录）升级时，旧的根目录模块文件会保留在安装目录中但不再被导入；新增的 `shiguangji/` 文件记入备份的 `rollback-files.json`，回退时按该列表移除即可恢复旧布局。升级前检查服务归属和任务空闲；保存程序文件备份；温和停止旧后台，校验更新文件，按升级前状态恢复后台；失败时回退程序文件。不建立开机自启动，不覆盖 `collections/`。
+升级时按安装目录中上一版的 `release.json` 找出新版不再包含的程序文件（仅限根目录 `.py`/`.pyw` 以及 `shiguangji/`、`static/` 下的代码与页面文件），先写入备份，待新文件全部校验通过后再删除；`collections/`、`runtime/`、`diagnostics/`、`tools/`、`python/`、FFmpeg、配置、文档和 `.cmd` 永不在清理范围内。没有 `release.json` 的老安装只按 `deploy_release.LEGACY_ROOT_MODULES`（1.28.2 及更早版本平铺在根目录的 52 个模块名）识别旧模块，且仅当新版已包含 `shiguangji/` 包时才清理。新增文件与删除的旧文件分别记入备份中 `rollback-files.json` 的 `added` 与 `removed`，升级失败时自动恢复被删除的文件。升级前检查服务归属和任务空闲；保存程序文件备份；温和停止旧后台，校验更新文件，按升级前状态恢复后台；失败时回退程序文件。不建立开机自启动，不覆盖 `collections/`。
 
 1.27 起，`shiguangji/storage/compressed_files.py` 提供逻辑文件读取，原始网页可存为 `.txt.gz`，备份对象可存为 `<sha256>.gz`。索引始终记录解压后的内容摘要和大小；原有时间戳保留。`shiguangji/storage/compact_library.py` 逐文件压缩、解压校验、最终路径读回，再释放对应的普通副本；进度保存在资料库内，失败项保留原件且可重试。新采集及新增备份对象自动压缩。媒体原件不进入压缩流程。网盘包和下载 ZIP 输出兼容旧版本的普通文件。
 
 数据压缩完成后，**回退到 1.26 或更早版本前必须先解压数据**：停止归档任务，在当前版本运行 `python shiguangji/storage/compact_library.py --base "实际合集目录" --expand`（1.27～1.28.2 中该脚本位于根目录 `compact_library.py`），确认结果无失败后再回退程序。解压会重新占用压缩所节省的空间。迁移和反向迁移都不删除合集内容或修改备份索引。
 
-备份 ZIP 中 `rollback-files.json` 列出本次新增程序文件；手动回退应先停止后台，恢复备份代码，移除这些明确列出的新增文件，然后正常启动。不要还原或删除合集目录。
+备份 ZIP 中 `rollback-files.json` 的 `added` 列出本次新增程序文件，`removed` 列出本次删除的旧程序文件（其内容已在备份中）；手动回退应先停止后台，恢复备份中的全部代码（包括 `removed` 中的文件），移除 `added` 中明确列出的新增文件，然后正常启动。不要还原或删除合集目录。
 
 1.19 没有改变原 SQLite 表结构、X 目录名或 `instagram--` 目录名，因此不要求全库迁移。旧名检索、存储方法和前端状态仍按后续需要渐进整理，不在本轮重写。
 

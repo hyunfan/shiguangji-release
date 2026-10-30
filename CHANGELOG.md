@@ -5,6 +5,8 @@
 - 代码结构：根目录平铺的 52 个应用模块按职责移入 `shiguangji/` 包（core、platforms、collect、sources、media、storage、tasks、system）；入口脚本、`.cmd` 启动方式、数据目录与界面行为不变。
 - 全库备份命令改为 `shiguangji\storage\backup_library.py`；无损压缩回退命令改为 `shiguangji/storage/compact_library.py`。
 - 发布白名单、便携包导入检查同步覆盖新包；新增包结构守护测试。
+- 本地服务：令牌含非 ASCII 字符时返回 403，不再断开连接；POST 处理增加兜底，未预期错误返回通用 500 并写入日志。
+- 升级：`deploy_release.py` 按上一版 `release.json`（老安装按旧模块名单）备份并删除新版不再包含的程序文件，避免从 1.28.2 升级后根目录残留旧模块；失败时自动恢复，用户数据与运行环境不在清理范围内。
 
 ## 1.28.2 · 2026-10-18
 
