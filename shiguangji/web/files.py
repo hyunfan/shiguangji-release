@@ -2,7 +2,7 @@
 import mimetypes
 import re
 
-STATIC_FILES = {"index.html", "app.js", "gallery.js", "history.js", "storage.js", "style.css"}
+STATIC_FILES = {"index.html", "app-core.js", "app-job.js", "app-collection.js", "app.js", "gallery.js", "history.js", "storage.js", "style.css"}
 COLLECTION_SUFFIXES = {".html", ".css", ".js", ".json", ".jsonl", ".csv", ".txt", ".jpg", ".png",
                        ".gif", ".webp", ".avif", ".mp4", ".webm"}
 CHUNK = 256 * 1024

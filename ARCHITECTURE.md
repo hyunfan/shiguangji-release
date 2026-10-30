@@ -38,6 +38,7 @@
 | `shiguangji/tasks/batch_runner.py` | `BatchRunner`：单次或自动多批采集循环与续批判断 |
 | `shiguangji/tasks/result_finalizer.py` | `ResultFinalizer`：结束原因解读、离线导出重建、失败记录写入 manifest |
 | `shiguangji/tasks/job_dispatch.py` / `shiguangji/tasks/task_queue.py` | 队列派发与原子持久化；准备失败和运行结束分别处理 |
+| `static/app-core.js` / `app-job.js` / `app-collection.js` / `app.js` | 主页面脚本：共享状态对象 `state` 与本地 API 客户端、任务面板、合集面板（含历史用户名与删除对话框）、轮询与表单控制器；均为 IIFE，经 `window.ShiguangjiApp` 共享，按此顺序加载，不使用 ES Modules。离线合集页只依赖 `gallery.js` |
 | `shiguangji/tasks/task_history.py` / `static/history.js` | 独立 SQLite 任务历史、旧数据补录、筛选分页与单条重试界面 |
 | `shiguangji/tasks/task_status.py` / `shiguangji/tasks/task_compat.py` | 当前结果展示；旧状态记录兼容推断 |
 | `shiguangji/platforms/platform_accounts.py` / `shiguangji/platforms/platform_registry.py` | 输入校验、平台行为、账号信息；保留现有合集键 |

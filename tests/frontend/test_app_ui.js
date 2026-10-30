@@ -33,6 +33,7 @@ class Element {
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
 const response=(data,status=200,etag=null)=>({status,ok:status>=200&&status<300,headers:{get:name=>name.toLowerCase()==='etag'?etag:null},json:async()=>structuredClone(data)});
 const manifest=(username,updated='2026-09-12T01:00:00Z')=>({username,updated_at:updated,zip_ready:true,collecting:false,status:'partial',counts:{posts:2},posts:[]});
+const APP_SCRIPTS=['app-core.js','app-job.js','app-collection.js','app.js'];
 const idleJob=()=>({running:false,status:'idle',stage:'done',username:'',logs:[]});
 
 const storageState=()=>({running:false,operation:'',message:'原件保留',settings:{zip_on_demand:true,zip_keep_days:7,backup_versions:3,cache_gb:5},cache:{bytes:0,limit_bytes:5*1024**3}});
@@ -218,7 +219,7 @@ function createApp({handler,preferred='',users=['alice','bob'],capabilities=['re
   context.window=context;
   vm.runInNewContext(fs.readFileSync(__dirname+'/../../static/history.js','utf8'),context,{filename:'static/history.js'});
   vm.runInNewContext(fs.readFileSync(__dirname+'/../../static/storage.js','utf8'),context,{filename:'static/storage.js'});
-  vm.runInNewContext(fs.readFileSync(__dirname+'/../../static/app.js','utf8'),context,{filename:'static/app.js'});
+  for(const name of APP_SCRIPTS)vm.runInNewContext(fs.readFileSync(__dirname+'/../../static/'+name,'utf8'),context,{filename:'static/'+name});
   return {get,calls,shown,server,storage,intervals,timeouts,
     tick:()=>Promise.all(intervals.map(fn=>fn())),
     clickUser:name=>{const button=get('library').children.find(n=>n.tagName==='button'&&n.children[0].textContent===(name.startsWith('instagram--')?'Instagram @'+name.slice(11):'X @'+name));assert.ok(button,'Missing account button '+name);return button.fire('click');},
@@ -897,7 +898,7 @@ test('input typed before initial collection loading is not lost or collapsed by 
 });
 
 test('HTML contains every controller target exactly once and keeps secondary tasks behind collapsed controls',()=>{
-  const html=fs.readFileSync(__dirname+'/../../static/index.html','utf8'),js=fs.readFileSync(__dirname+'/../../static/app.js','utf8');
+  const html=fs.readFileSync(__dirname+'/../../static/index.html','utf8'),js=APP_SCRIPTS.map(name=>fs.readFileSync(__dirname+'/../../static/'+name,'utf8')).join('\n');
   const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]);
   assert.equal(new Set(ids).size,ids.length,'IDs must be unique');
   for(const [,id] of js.matchAll(/\$\('([^']+)'\)/g))assert.ok(ids.includes(id),'Missing controller target '+id);
@@ -915,6 +916,13 @@ test('HTML contains every controller target exactly once and keeps secondary tas
   assert.doesNotMatch(html,/补全已知媒体|扩展查找帖子|自动补全/);
 });
 
+test('index page loads the shared core first, then panels, then the controller',()=>{
+  const html=fs.readFileSync(__dirname+'/../../static/index.html','utf8');
+  const scripts=[...html.matchAll(/<script src="\/static\/([^"]+)" defer><\/script>/g)].map(match=>match[1]);
+  assert.deepEqual(scripts.filter(name=>name.startsWith('app')),APP_SCRIPTS);
+  for(const name of ['history.js','storage.js'])assert.ok(scripts.indexOf(name)<scripts.indexOf('app.js'));
+  for(const name of APP_SCRIPTS)assert.match(fs.readFileSync(__dirname+'/../../static/'+name,'utf8'),/^\/\*[^\n]*\*\/\n\(\(\) => \{\n  'use strict';/);
+});
 test('native progress reports only current-step completion using CSP-compatible attributes',async()=>{
   const app=createApp();await settle();
   for(const stage of ['pages','media','sources']){
