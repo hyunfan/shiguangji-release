@@ -270,4 +270,27 @@ class ServerTests(unittest.TestCase):
             path.write_bytes(previous)
             make_zip(self.folder/'alice')
 
+    def test_non_ascii_token_is_rejected_with_403(self):
+        body=json.dumps({'username':'alice'})
+        for token in ('\u00e9'*8, app.TOKEN[:-1]+'\u00e9', '\u00ff'):
+            with self.subTest(token=token):
+                status,_,data=self.request('/api/start','POST',{'X-Local-Token':token,'Content-Type':'application/json'},body)
+                self.assertEqual(status,403)
+                self.assertIn('error',json.loads(data))
+        self.assertFalse(app.token_matches('\u00e9'))
+        self.assertFalse(app.token_matches('\ud800'))
+        self.assertFalse(app.token_matches(None))
+        self.assertTrue(app.token_matches(app.TOKEN))
+
+    def test_unexpected_post_error_returns_generic_500_and_logs(self):
+        headers={'X-Local-Token':app.TOKEN,'Content-Type':'application/json'}
+        with patch.object(app,'save_settings',side_effect=RuntimeError('secret internal detail')), \
+                self.assertLogs('shiguangji.app','ERROR') as logged:
+            status,_,data=self.request('/api/reliability','POST',headers,json.dumps({}))
+        self.assertEqual(status,500)
+        payload=json.loads(data)
+        self.assertNotIn('secret internal detail',payload['error'])
+        self.assertIn('secret internal detail','\n'.join(logged.output))
+        self.assertEqual(self.request('/api/state')[0],200)
+
 if __name__=='__main__':unittest.main()

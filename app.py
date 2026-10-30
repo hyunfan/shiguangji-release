@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -42,6 +43,17 @@ from shiguangji.storage.storage_policy import settings as storage_settings
 from shiguangji.storage.cloud_media import open_media
 
 TOKEN = secrets.token_urlsafe(32)
+LOG = logging.getLogger("shiguangji.app")
+
+
+def token_matches(supplied, expected=None):
+    """Constant-time token check that rejects (instead of raising on) non-ASCII input."""
+    expected = TOKEN if expected is None else expected
+    try:
+        supplied_bytes = str(supplied or "").encode("utf-8", "surrogateescape")
+    except UnicodeError:
+        return False
+    return secrets.compare_digest(supplied_bytes, expected.encode("utf-8"))
 CLOUD = None
 STORAGE = None
 
@@ -295,7 +307,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
                 remaining -= len(chunk)
     def do_POST(self):
-        if not self.valid_host() or not secrets.compare_digest(self.headers.get("X-Local-Token", ""), TOKEN):
+        try:
+            self.post()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except Exception:
+            LOG.exception("Unhandled error in POST %s", urlsplit(self.path).path)
+            try:
+                self.json({"error": "本地服务内部错误，请稍后重试。"}, 500)
+            except OSError:
+                pass
+    def post(self):
+        if not self.valid_host() or not token_matches(self.headers.get("X-Local-Token", "")):
             return self.json({"error": "请刷新本地页面后重试。"}, 403)
         origin = self.headers.get("Origin")
         if origin and origin not in {f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}"}:
