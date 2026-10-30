@@ -16,13 +16,14 @@ import subprocess
 import tempfile
 import time
 from urllib.parse import urljoin, urlsplit
+from shiguangji import APP_ROOT
 from shiguangji.core.atomic_io import atomic_write_bytes, atomic_write_text, replace_file
 from shiguangji.core.archive_support import replay, now
 from shiguangji.core.core_errors import ArchiveError
 from shiguangji.media.media_files import file_valid, VALIDATION_VERSION
 from shiguangji.storage.storage_guard import require_space
 
-ROOT=Path(__file__).resolve().parent
+ROOT=APP_ROOT
 
 
 def asset(url):

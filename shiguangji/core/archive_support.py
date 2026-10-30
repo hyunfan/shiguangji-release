@@ -5,9 +5,10 @@ import re
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
+from shiguangji import APP_ROOT
 from shiguangji.core.atomic_io import atomic_write_text
 from shiguangji.platforms.extractor import original_url
-ROOT = Path(__file__).resolve().parent
+ROOT = APP_ROOT
 DATA = ROOT / "collections"
 CDX = "https://web.archive.org/cdx/search/cdx"
 HOSTS = ("twitter.com", "mobile.twitter.com", "m.twitter.com", "x.com", "mobile.x.com", "m.x.com")

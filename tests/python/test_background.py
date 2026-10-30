@@ -177,7 +177,8 @@ class BackgroundProcessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='后台 启动 ') as folder:
             root = Path(folder)
             shutil.copyfile(launcher.ROOT / 'launcher.py', root / 'launcher.py')
-            shutil.copyfile(launcher.ROOT / 'atomic_io.py', root / 'atomic_io.py')
+            shutil.copytree(launcher.ROOT / 'shiguangji', root / 'shiguangji',
+                            ignore=shutil.ignore_patterns('__pycache__'))
             (root / 'app.py').write_text(SERVER_FIXTURE, encoding='utf-8')
             port = free_port()
             command = [sys.executable, '-X', 'utf8', str(root / 'launcher.py'), '--no-open', '--port', str(port)]

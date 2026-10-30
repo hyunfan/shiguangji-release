@@ -11,6 +11,14 @@ import tempfile
 import time
 import zipfile
 from contextlib import closing
+import sys
+if __package__ in (None, ''):
+    # 以文件路径运行（自身子进程或命令行）时，从应用根目录导入 shiguangji 包。
+    _here, _root = Path(__file__).resolve().parent, str(Path(__file__).resolve().parents[2])
+    if sys.path and sys.path[0] and Path(sys.path[0]).resolve() == _here:del sys.path[0]
+    if _root not in sys.path:sys.path.insert(0, _root)
+
+from shiguangji import APP_ROOT
 from shiguangji.core.atomic_io import atomic_write_text, replace_file
 from shiguangji.storage.collection_lock import collection_lock
 from shiguangji.platforms.platform_accounts import collection_key
@@ -159,8 +167,8 @@ def restore_backup(state_path,target):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base',type=Path,default=Path(__file__).parent/'collections')
-    parser.add_argument('--output',type=Path,default=Path(__file__).parent/'collections-backups')
+    parser.add_argument('--base',type=Path,default=APP_ROOT/'collections')
+    parser.add_argument('--output',type=Path,default=APP_ROOT/'collections-backups')
     parser.add_argument('--username')
     parser.add_argument('--restore',type=Path)
     parser.add_argument('--restore-to',type=Path)
