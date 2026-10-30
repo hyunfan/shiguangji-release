@@ -1,5 +1,11 @@
 # 更新记录
 
+## 未发布
+
+- 代码结构：根目录平铺的 52 个应用模块按职责移入 `shiguangji/` 包（core、platforms、collect、sources、media、storage、tasks、system）；入口脚本、`.cmd` 启动方式、数据目录与界面行为不变。
+- 全库备份命令改为 `shiguangji\storage\backup_library.py`；无损压缩回退命令改为 `shiguangji/storage/compact_library.py`。
+- 发布白名单、便携包导入检查同步覆盖新包；新增包结构守护测试。
+
 ## 1.28.2 · 2026-10-18
 
 - 发布隐私扫描覆盖 YAML、TOML、INI、Shell 和示例环境配置；带凭据网址的测试豁免收紧到指定文件中的完整虚构网址，新增漏检回归检查。

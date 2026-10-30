@@ -106,13 +106,13 @@ python -X utf8 app.py --open
 ```powershell
 $BackupDir = Join-Path (Get-Location).Path '..\archive-backup'
 $RestoreDir = Join-Path (Get-Location).Path '..\archive-restore-check'
-.\python\python.exe -X utf8 .\backup_library.py --output $BackupDir
+.\python\python.exe -X utf8 .\shiguangji\storage\backup_library.py --output $BackupDir
 ```
 
 恢复前先用“停止时光集”退出后台。下面恢复一个账号到**尚不存在的新目录**，先验证备份再写入，不覆盖原资料：
 
 ```powershell
-.\python\python.exe -X utf8 .\backup_library.py --restore (Join-Path $BackupDir 'alice.json') --restore-to $RestoreDir
+.\python\python.exe -X utf8 .\shiguangji\storage\backup_library.py --restore (Join-Path $BackupDir 'alice.json') --restore-to $RestoreDir
 ```
 
 `alice.json` 是虚构账号示例，替换为实际的备份索引文件名；网盘恢复包要先完整解压，再选其中的索引。恢复后可把新目录作为独立资料库启动检查：`.\python\python.exe -X utf8 .\app.py --data-dir $RestoreDir --port 8767 --open`。该端口须空闲；离线文件和 ZIP 可在合集页重新生成。源码版将上述 `.\python\python.exe` 换为系统 Python。保留整个备份目录，包括 `objects` 文件夹；不要只复制账号 JSON。相同硬盘上的备份不能防止磁盘损坏。
