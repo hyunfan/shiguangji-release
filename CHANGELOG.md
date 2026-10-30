@@ -19,6 +19,7 @@
 - 测试：为 `storage/storage_service.py`、`supervisor.py`、`launcher.py` 补行为测试（`test_storage_service.py`、`test_supervisor.py`、`test_launcher_background.py`），覆盖空间任务的预览/释放/暂停/失败与网盘试读、守护的重启退避与停止、后台启动/停止与锁竞争；覆盖率分别 22% → 98%、53% → 78%、72% → 91%，剩余主要是 Windows 专属分支（相应用例在 Linux 上跳过）。
 - 依赖方向（续）：包结构守卫的已知违规名单清零（上限改为 0）。压缩文本的只读函数下沉到 `core/stored_text.py`，`platforms.account_identity` 不再导入 `storage`；单个清单的任务结果解读下沉到 `core/task_summary.py`，`storage.collection_export` 不再导入 `tasks`；`ProcessReference` 移到 `system/process_reference.py`，`storage.cloud_backup` 不再导入根目录 `supervisor.py`。原模块继续转出这些名称，行为不变；守卫新增夹具测试，确认空名单下仍能拦截这三类延迟导入。
 - 升级：`deploy_release.py` 在升级成功后清理 `shiguangji/` 包内源文件已不存在的 `.pyc`（含 `__pycache__` 孤立缓存与无源字节码）及清空的缓存目录，结果计入输出的 `bytecode_removed`；升级失败回退时不清理，备份与回退流程不变，包外目录和用户数据不受影响。
+- 发布包：源码包和便携包的 ZIP 条目使用固定时间戳并按文件名排序，同一输入连续构建的外层 SHA-256 保持一致；`release.json` 逐文件摘要、部署与升级行为不变。
 
 ## 1.28.2 · 2026-10-18
 
