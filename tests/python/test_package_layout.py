@@ -24,7 +24,7 @@ SELF_SPAWNED = ('cloud_backup', 'cloud_media', 'backup_library', 'compact_librar
 # reference each other) -> collect -> tasks -> root entry scripts (app.py, ...). A package may only
 # import packages of the same or a lower tier. system depends on core only and may be used by any
 # tier. Package modules never import root scripts.
-TIERS = {'core': 0, 'platforms': 1, 'sources': 2, 'media': 2, 'storage': 2, 'collect': 3, 'tasks': 4}
+TIERS = {'core': 0, 'platforms': 1, 'sources': 2, 'media': 2, 'storage': 2, 'collect': 3, 'tasks': 4, 'web': 5}
 # Known violations that are not yet safe to fix, as (module file, imported module).
 # This list may only shrink: a new violation fails, and so does an entry that no longer occurs.
 KNOWN_VIOLATIONS = {

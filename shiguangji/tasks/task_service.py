@@ -116,6 +116,13 @@ class TaskService:
     def collection_busy(self, handle):
         return collection_is_busy(self.base / handle)
 
+    def collection_active(self, handle, key=None):
+        """True while this service collects ``handle`` or another process holds the collection lock.
+
+        ``key`` is the on-disk collection key when it differs from the job's username.
+        """
+        return (self.job['running'] and self.job['username'] == handle) or self.collection_busy(key or handle)
+
     def task_queue(self):
         path = self.base / '.task-queue.json'
         if self.queue is None or self.queue.path != path:

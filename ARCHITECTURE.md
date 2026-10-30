@@ -16,13 +16,14 @@
 | `shiguangji/media/` | 媒体：下载、文件校验、媒体汇总、多源恢复、HLS 合并 |
 | `shiguangji/storage/` | 存储：合集数据库、读取、导出（含缺失原因报告）、锁、删除、压缩、空间策略、备份、网盘副本与试读 |
 | `shiguangji/tasks/` | 任务：任务服务、队列与派发、状态与兼容、任务历史、自动续批 |
+| `shiguangji/web/` | 本地 HTTP 接口：请求处理与错误映射（handler）、GET/POST 路由表（routes_get / routes_post）、静态与 Range 文件（files）、采集参数（options）、Host/Origin/令牌校验（security） |
 | `shiguangji/system/` | 系统与可靠性：防休眠、守护设置与诊断、Windows Shell Link 接口 |
 
 包内模块统一使用绝对导入（`from shiguangji.<层> import 模块` 或 `from shiguangji.<层>.模块 import 名称`）。需要应用根目录的模块使用 `shiguangji.APP_ROOT`，不要用 `Path(__file__).parent` 推算。`cloud_backup.py`、`cloud_media.py` 以自身文件路径启动子进程，`backup_library.py`、`compact_library.py` 可按文件路径运行；这几个模块在以脚本方式运行时会把应用根目录加入 `sys.path`。新增模块时同步更新 `release_files.json`，`tests/python/test_package_layout.py` 会检查根目录与白名单。
 
 ### 依赖方向
 
-包之间只允许向下依赖：`core` → `platforms`（纯解析）→ `sources` / `media` / `storage`（同层可互相引用）→ `collect` → `tasks` → 根目录入口（`app.py` 等）。`system` 只依赖 `core`，可被任意层使用；包内模块不导入根目录脚本。`tests/python/test_package_layout.py` 用 `ast` 扫描全部 import（包括函数内的延迟导入）守护这一规则；暂时无法安全修复的已知违规列在该测试的 `KNOWN_VIOLATIONS` 中并注明原因，该名单只能减少，新增违规或已修复但未移除的条目都会让测试失败。
+包之间只允许向下依赖：`core` → `platforms`（纯解析）→ `sources` / `media` / `storage`（同层可互相引用）→ `collect` → `tasks` → `web` → 根目录入口（`app.py` 等）。`system` 只依赖 `core`，可被任意层使用；包内模块不导入根目录脚本。`tests/python/test_package_layout.py` 用 `ast` 扫描全部 import（包括函数内的延迟导入）守护这一规则；暂时无法安全修复的已知违规列在该测试的 `KNOWN_VIOLATIONS` 中并注明原因，该名单只能减少，新增违规或已修复但未移除的条目都会让测试失败。
 
 ## 模块边界
 
@@ -30,7 +31,8 @@
 
 | 模块 | 职责 |
 |---|---|
-| `app.py` | HTTP 参数、安全边界、响应与后台启动 |
+| `app.py` | 入口与组装：命令行、单实例与后台启动；持有 `TASKS`、`CLOUD`、`STORAGE` 等单例。路由在请求时通过本模块读取这些对象，测试仍可直接替换 `app.*` |
+| `shiguangji/web/` | HTTP 安全边界（Host、Origin、`X-Local-Token`）、请求体限制、路由表分派与错误码映射；不导入根目录脚本 |
 | `shiguangji/tasks/task_service.py` | 每个资料库独立的任务状态、取消信号、自动续批、保存、打包与队列衔接 |
 | `shiguangji/tasks/job_dispatch.py` / `shiguangji/tasks/task_queue.py` | 队列派发与原子持久化；准备失败和运行结束分别处理 |
 | `shiguangji/tasks/task_history.py` / `static/history.js` | 独立 SQLite 任务历史、旧数据补录、筛选分页与单条重试界面 |

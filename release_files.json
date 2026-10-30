@@ -86,5 +86,12 @@
   "shiguangji/tasks/task_history.py",
   "shiguangji/tasks/task_queue.py",
   "shiguangji/tasks/task_service.py",
-  "shiguangji/tasks/task_status.py"
+  "shiguangji/tasks/task_status.py",
+  "shiguangji/web/__init__.py",
+  "shiguangji/web/files.py",
+  "shiguangji/web/handler.py",
+  "shiguangji/web/options.py",
+  "shiguangji/web/routes_get.py",
+  "shiguangji/web/routes_post.py",
+  "shiguangji/web/security.py"
 ]
