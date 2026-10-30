@@ -24,7 +24,7 @@ if __package__ in (None, ''):
     if sys.path and sys.path[0] and Path(sys.path[0]).resolve() == _here:del sys.path[0]
     if _root not in sys.path:sys.path.insert(0, _root)
 
-from shiguangji.core.atomic_io import atomic_write_bytes, atomic_write_text
+from shiguangji.core.atomic_io import atomic_write_bytes, atomic_write_text, read_json, write_json
 from shiguangji.storage.collection_lock import collection_lock
 from shiguangji.platforms.platform_accounts import collection_key
 from shiguangji.system.power_guard import prevent_idle_sleep
@@ -48,18 +48,6 @@ RESTORE_NOTE = '''时光集恢复备份
 恢复包按快照保留，不联动删除。挂载盘读回通过不等于网盘已上传完毕，
 请在所用网盘客户端或服务端核实，并保留本地原始资料。
 '''
-
-
-def read_json(path, default=None):
-    try:
-        value = json.loads(Path(path).read_text(encoding='utf-8'))
-        return value if isinstance(value, dict) else (default or {})
-    except (OSError, ValueError):
-        return default or {}
-
-
-def write_json(path, data):
-    atomic_write_text(path, json.dumps(data, ensure_ascii=False))
 
 
 def backup_root(base):

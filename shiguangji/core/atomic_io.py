@@ -1,6 +1,7 @@
 """Atomic publication with bounded retries for Windows sharing/scan locks."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -44,6 +45,19 @@ def atomic_write_bytes(path, data):
 
 def atomic_write_text(path, text):
     atomic_write_bytes(path, text.encode('utf-8'))
+
+
+def read_json(path, default=None):
+    """A JSON object from ``path``; ``default`` (or ``{}``) when missing, unreadable or not an object."""
+    try:
+        value = json.loads(Path(path).read_text(encoding='utf-8'))
+        return value if isinstance(value, dict) else (default or {})
+    except (OSError, ValueError):
+        return default or {}
+
+
+def write_json(path, value, *, indent=None):
+    atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=indent))
 
 
 def publish_if_changed(path, data):

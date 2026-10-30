@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from shiguangji import APP_ROOT
-from shiguangji.core.atomic_io import atomic_write_text
+from shiguangji.core.atomic_io import write_json as write_json_file
 from shiguangji.core.archive_urls import original_url
 ROOT = APP_ROOT
 DATA = ROOT / "collections"
@@ -52,7 +52,8 @@ def missing_cache_valid(p, m, force=False):
         return False
 
 def write_json(path, value):
-    atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2))
+    # Collection files stay human-readable (indented), unlike compact control files.
+    write_json_file(path, value, indent=2)
 
 def replay(timestamp, original, raw=True):
     return f"https://web.archive.org/web/{timestamp}{'id_' if raw else ''}/{original}"

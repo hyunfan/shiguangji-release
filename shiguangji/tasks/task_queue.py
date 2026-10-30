@@ -8,6 +8,7 @@ import uuid
 import time
 import math
 
+from shiguangji.core.archive_support import now
 from shiguangji.core.atomic_io import atomic_write_text
 from shiguangji.platforms.platform_accounts import collection_key as username, account_input, account_info
 from shiguangji.tasks.task_status import retry_limit_summary, REASONS
@@ -29,10 +30,6 @@ def retry_epoch(value):
         return result if math.isfinite(result) else 0
     except (ValueError, TypeError, OverflowError, OSError):
         return 0
-
-
-def now():
-    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
 def parse_handles(value, platform="x"):

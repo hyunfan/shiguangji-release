@@ -11,6 +11,7 @@
 - 本地服务：`app.py` 的请求处理拆入 `shiguangji/web/`，GET/POST 改用路由表；“合集是否正在采集”的判断收敛为 `TaskService.collection_active`。`app.py` 仍是入口，启动方式、接口、令牌与来源校验不变。
 - 任务服务：`TaskService` 按职责拆为 `QueueCoordinator`（队列与历史）、`BatchRunner`（自动多批循环）、`ResultFinalizer`（结果解读与导出），`TaskService` 保留为门面，公开方法不变。
 - 长函数：`extractor.extract` 按解析来源拆为固定链接、HTML 容器、JSON、页面元数据等步骤；`reuse_local_aliases` 拆出源合集读取、快照解析、媒体复用与原始快照保存；解析结果与复用行为不变。
+- 公共函数：重复的 `read_json` / `write_json` 合并到 `shiguangji/core/atomic_io.py`，任务队列改用 `core` 的 `now`；合集文件仍为缩进格式，控制文件仍为紧凑格式。
 
 ## 1.28.2 · 2026-10-18
 

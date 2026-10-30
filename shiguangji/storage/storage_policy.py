@@ -12,7 +12,7 @@ import time
 import zipfile
 import zlib
 
-from shiguangji.core.atomic_io import atomic_write_text
+from shiguangji.core.atomic_io import atomic_write_text, read_json
 from shiguangji.storage.collection_lock import collection_lock
 from shiguangji.storage.collection_export import zip_is_current
 from shiguangji.platforms.platform_accounts import collection_key
@@ -20,14 +20,6 @@ from shiguangji.platforms.platform_accounts import collection_key
 DEFAULTS = {'zip_on_demand': True, 'zip_keep_days': 7, 'backup_versions': 3,
             'cache_gb': 5}
 _lock = threading.RLock()
-
-
-def read_json(path):
-    try:
-        value = json.loads(Path(path).read_text(encoding='utf-8'))
-        return value if isinstance(value, dict) else {}
-    except (OSError, ValueError):
-        return {}
 
 
 def settings(base):
