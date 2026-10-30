@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import json
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -127,6 +128,10 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(status,206);self.assertEqual(data,b'2345')
             self.assertEqual(headers['Content-Type'],'video/mp4')
             self.assertEqual(headers['Content-Range'],'bytes 2-5/10')
+            # The handler releases the read lease right after writing the body, so the
+            # client can finish reading first; wait (bounded) for the release.
+            deadline=time.monotonic()+5
+            while leased and time.monotonic()<deadline:time.sleep(0.01)
             self.assertFalse(leased)
             with patch.object(app,'open_media',side_effect=TimeoutError('cloud read timeout')):
                 self.assertEqual(self.request('/api/cloud-media/alice/media/example.mp4')[0],503)
