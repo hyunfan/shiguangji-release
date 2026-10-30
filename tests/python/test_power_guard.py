@@ -1,5 +1,4 @@
 """Sleep requests are bounded to the worker, including failure and final exports."""
-import json
 import tempfile
 import threading
 import unittest

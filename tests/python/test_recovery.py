@@ -7,9 +7,9 @@ import unittest
 import zlib
 from email.message import Message
 from pathlib import Path
-from shiguangji.collect.archive import ArchiveError, Client, Collector, Store, decode_page, corrupt_page, media_search_prefix
-from shiguangji.platforms.extractor import extract, media_item, blank_post
-from test_archive import FixtureClient, FakeResponse, PID, URL, TS, HTML, IMAGE, PNG
+from shiguangji.collect.archive import ArchiveError, Client, Collector, decode_page, corrupt_page, media_search_prefix
+from shiguangji.platforms.extractor import extract, media_item
+from test_archive import FixtureClient, FakeResponse, URL, TS, HTML, IMAGE, PNG
 
 class RecoveryTests(unittest.TestCase):
     def headers(self, encoding='gzip'):

@@ -7,7 +7,6 @@ import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from http.server import ThreadingHTTPServer
 import app
 from shiguangji.collect.archive import Collector, make_zip
 from test_archive import FixtureClient

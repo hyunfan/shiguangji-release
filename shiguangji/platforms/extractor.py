@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlsplit, urlunsplit, parse_qs, unquote
+from urllib.parse import urljoin, urlsplit, parse_qs
 from shiguangji.core.archive_urls import original_url  # re-exported for platform/source callers
 
 X_HOSTS = {"twitter.com", "www.twitter.com", "mobile.twitter.com", "m.twitter.com",

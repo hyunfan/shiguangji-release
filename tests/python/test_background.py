@@ -1,6 +1,5 @@
 """Background lifecycle tests. Real subprocess tests use isolated, synthetic libraries."""
 import io
-import json
 import os
 from pathlib import Path
 import shutil

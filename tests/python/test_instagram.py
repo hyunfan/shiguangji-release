@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 import app
-from shiguangji.collect.archive import Store, export_collection, make_zip, ArchiveError, validate_replay_target, replay
+from shiguangji.collect.archive import Store, make_zip, ArchiveError, validate_replay_target, replay
 from shiguangji.collect.instagram_archive import InstagramCollector
 from shiguangji.platforms.instagram_extract import extract, blank_post, media_item, post_links
 from shiguangji.platforms.platform_accounts import account_input, collection_key

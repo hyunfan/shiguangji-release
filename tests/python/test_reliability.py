@@ -1,5 +1,4 @@
 """Fault injection with isolated fixture libraries; no external archive claims."""
-import io
 import json
 from pathlib import Path
 import sqlite3
@@ -12,7 +11,7 @@ from urllib.error import HTTPError
 from shiguangji.collect.archive import Client, Collector
 from shiguangji.core.core_errors import ArchiveError
 from shiguangji.sources.retry_policy import RetryPolicy, DeferredRequest, TrackedResponse
-from shiguangji.storage.storage_guard import StorageLow, require_space, rotate_log
+from shiguangji.storage.storage_guard import StorageLow, rotate_log
 from shiguangji.storage.backup_library import backup_collection, restore_backup, digest, sqlite_copy
 from shiguangji.system.reliability import settings, save_settings, worker_health
 from shiguangji.tasks.task_service import TaskService

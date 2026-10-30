@@ -85,12 +85,12 @@ class CloudBackupTests(unittest.TestCase):
         self.assertEqual(len(list((self.destination/'恢复包').glob('alice-*.zip'))), 1)
 
     def test_partial_bundle_repair_and_prior_snapshot_preservation(self):
-        index = self.backup(); self.run_copy()
+        self.backup(); self.run_copy()
         receipt = cloud.read_json(self.control/'receipts.json')['alice']
         damaged = self.destination/receipt['bundle']; damaged.write_bytes(b'incomplete')
         cloud.write_json(self.control/'receipts.json', {})
         self.run_copy(); self.assertEqual(digest(damaged), receipt['sha256'])
-        second = Path(backup_collection(self.base, 'alice', cloud.backup_root(self.base))['path'])
+        Path(backup_collection(self.base, 'alice', cloud.backup_root(self.base))['path'])
         self.run_copy()
         self.assertEqual(cloud.read_json(self.control / 'receipts.json')['alice']['copied'], 1)
         self.assertEqual(len(list((self.destination/'恢复包').glob('alice-*.zip'))), 2)

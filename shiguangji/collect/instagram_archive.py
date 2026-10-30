@@ -1,6 +1,5 @@
 """Bounded, resumable Instagram recovery from public Wayback snapshots."""
 import hashlib
-import json
 import threading
 import time
 from pathlib import Path
@@ -83,7 +82,7 @@ class InstagramCollector:
 
     def valid_capture(self,record,query):
         try:
-            u=urlsplit(record['original']); q=urlsplit(query['url'])
+            u=urlsplit(record['original']); urlsplit(query['url'])  # rejects malformed query URLs
             if u.hostname not in IG_HOSTS or u.scheme not in {'http','https'} or u.username or u.port not in {None,80,443}:return False
             if query['kind']=='post':return shortcode(record['original'])==shortcode(query['url']) and bool(shortcode(query['url']))
             parts=u.path.strip('/').split('/')
@@ -170,7 +169,7 @@ class InstagramCollector:
                     except ValueError:pass
                 self.budget.before_work()
                 with self.store.db:self.store.db.execute("INSERT OR REPLACE INTO settings VALUES('instagram_media_cursor',?)",(p['id'],))
-                candidates=[]; failures=[]; queried=False; truncated=False
+                candidates=[]; failures=[]; truncated=False
                 # Query exact signed URLs and then the same CDN path without query parameters.
                 try:
                     for url in m['urls'][:4]:
@@ -179,7 +178,6 @@ class InstagramCollector:
                         for target,match in ((url,'exact'),(urlunsplit((u.scheme,u.netloc,u.path,'','')),'prefix')):
                             count=0
                             for records,_ in self.client.cdx_pages(target,match):
-                                queried=True
                                 for r in records:
                                     other=media_item(r['original'],m['kind'])
                                     if other and other['key']==m['key']:candidates.append(replay(r['timestamp'],r['original']))

@@ -1,8 +1,6 @@
 """Storage-format regressions: interruption, legacy indexes and real round trips."""
-import gzip
 import hashlib
 import json
-import os
 from pathlib import Path
 import tempfile
 import threading

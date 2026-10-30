@@ -6,7 +6,6 @@ import re
 import threading
 import time
 import zlib
-from shiguangji.core.app_version import VERSION
 from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit

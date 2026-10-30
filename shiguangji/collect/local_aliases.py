@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 import time
 
-from shiguangji.core.atomic_io import atomic_write_bytes, replace_file
+from shiguangji.core.atomic_io import replace_file
 from shiguangji.storage.collection_lock import collection_lock, CollectionBusy
 from shiguangji.platforms.extractor import extract
 from shiguangji.storage import compressed_files as raw_files

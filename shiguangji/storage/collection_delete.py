@@ -1,6 +1,5 @@
 """Delete exactly one confirmed local collection while respecting its writer lock."""
 import os
-import re
 import shutil
 from pathlib import Path
 from shiguangji.storage.collection_lock import collection_lock

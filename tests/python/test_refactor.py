@@ -12,11 +12,11 @@ from shiguangji.sources.source_http import SourceClient
 from shiguangji.core.core_errors import ArchiveError, failure_kind
 from shiguangji.media.media_files import media_valid, saved_file_valid
 from test_archive import FakeResponse, IMAGE
-from test_media_fixtures import PNG, VIDEO, FRAGMENTED, WEBM, png, box
+from test_media_fixtures import PNG, VIDEO, FRAGMENTED, WEBM, box
 from shiguangji.tasks.task_queue import TaskQueue
 from shiguangji.tasks.job_dispatch import dispatch
 from shiguangji.tasks.task_status import summary
-from shiguangji.storage.collection_reader import read_summary, read_document, post_page, _summaries, _documents
+from shiguangji.storage.collection_reader import read_summary, post_page, _summaries, _documents
 from shiguangji.storage.collection_export import publish_manifest
 from shiguangji.sources.search_plan import indexes_plan, update_progress
 from shiguangji.platforms.platform_registry import Account, platform_for

@@ -8,7 +8,7 @@ import zlib
 from shiguangji.core.app_version import VERSION
 from http.client import HTTPException
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit, urljoin, unquote_plus, parse_qs
+from urllib.parse import urlencode, urlsplit, unquote_plus
 from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
 from shiguangji.core.core_errors import ArchiveError, Cancelled
 from shiguangji.core.archive_support import CDX, CDX_SUCCESS_FILTER
@@ -209,7 +209,7 @@ def parse_cdx(body):
             continue
         fields = line.split()
         if len(fields) == 5 and re.fullmatch(r"\d{14}", fields[0]):
-            records.append(dict(zip(("timestamp", "original", "mimetype", "statuscode", "digest"), fields)))
+            records.append(dict(zip(("timestamp", "original", "mimetype", "statuscode", "digest"), fields, strict=True)))
         elif len(fields) == 1 and not line.startswith("<"):
             resume = unquote_plus(line)
         else:

@@ -1,9 +1,8 @@
 """Read archived Instagram HTML/JSON without executing page scripts."""
 import hashlib
-import html
 import json
 import re
-from urllib.parse import urlsplit, urljoin, urlunsplit
+from urllib.parse import urlsplit, urljoin
 from shiguangji.platforms.extractor import Document, original_url, iso_date, merge_post
 from shiguangji.platforms.platform_accounts import IG_HOSTS, instagram_username
 

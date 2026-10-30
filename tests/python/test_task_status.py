@@ -12,7 +12,7 @@ import app
 from shiguangji.tasks import result_finalizer, task_service
 from shiguangji.collect.archive import Cancelled, Store, export_collection, zip_is_current
 from shiguangji.platforms.extractor import blank_post
-from shiguangji.tasks.job_state import read_job, write_job
+from shiguangji.tasks.job_state import read_job
 from shiguangji.tasks.task_status import summary, collection_summary, same_run
 
 

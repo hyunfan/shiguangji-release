@@ -10,7 +10,7 @@ from shiguangji.core.core_errors import ArchiveError
 from shiguangji.core.archive_support import media_context, now, replay
 from shiguangji.sources.archive_http import media_search_prefix
 from shiguangji.media.media_files import media_extension
-from shiguangji.platforms.extractor import X_HOSTS, media_item, original_url
+from shiguangji.platforms.extractor import X_HOSTS, media_item
 from shiguangji.sources.source_http import SourceClient
 from shiguangji.core.core_errors import failure_kind
 from shiguangji.core.atomic_io import atomic_write_bytes

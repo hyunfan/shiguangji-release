@@ -3,29 +3,33 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit, urljoin, unquote_plus, parse_qs
+from urllib.parse import urlsplit
 from shiguangji.storage.collection_lock import collection_lock
 from shiguangji.storage import compressed_files as raw_files
-from shiguangji.core.atomic_io import atomic_write_bytes, atomic_write_text, publish_if_changed, replace_file, temporary_lock
-from shiguangji.platforms.extractor import belongs, blank_post, extract, media_item, merge_post, original_url, post_id
-from shiguangji.platforms.account_identity import Catalog, search_handles, revision, snapshot as identity_snapshot
+from shiguangji.core.atomic_io import temporary_lock
+from shiguangji.platforms.extractor import belongs, blank_post, extract, media_item, merge_post, post_id
+from shiguangji.platforms.account_identity import Catalog, search_handles, revision
 from shiguangji.collect.run_budget import RunBudget, RunLimit
 
-from shiguangji.core.archive_support import (ROOT, DATA, HOSTS, CDX, CDX_SUCCESS_FILTER, MISSING_CACHE_SECONDS,
-    PARSER_CACHE_VERSION, INDEX_POLICY_VERSION, now, replay, write_json,
+from shiguangji.core.archive_support import (DATA, HOSTS,
+    PARSER_CACHE_VERSION, now, replay,
     neighboring_handle, media_context, missing_cache_valid)
+# Compatibility re-exports: callers and tests import these from this module.
+from shiguangji.core.archive_support import INDEX_POLICY_VERSION, write_json  # noqa: F401
 from shiguangji.core.core_errors import Cancelled, ArchiveError, failure_kind
-from shiguangji.sources.archive_http import Client, ArchiveRedirect, archive_only, decode_page, corrupt_page, media_search_prefix, validate_replay_target, parse_cdx
-from shiguangji.media.media_files import media_extension, saved_file_valid
+from shiguangji.sources.archive_http import Client, corrupt_page, media_search_prefix
+from shiguangji.sources.archive_http import archive_only, decode_page, parse_cdx, validate_replay_target  # noqa: F401
+from shiguangji.media.media_files import saved_file_valid
+from shiguangji.media.media_files import media_extension  # noqa: F401
 from shiguangji.storage.collection_store import Store
 from shiguangji.sources.retry_policy import RetryPolicy
 from shiguangji.storage.storage_guard import StorageLow, require_space, rotate_log
-from shiguangji.storage.collection_export import publish_manifest, export_collection, make_zip, zip_is_current
+from shiguangji.storage.collection_export import export_collection
+from shiguangji.storage.collection_export import make_zip, zip_is_current  # noqa: F401
 
 class Collector:
     def __init__(self, handle, options=None, progress=lambda **k: None, stop=None, base=DATA, client=None):

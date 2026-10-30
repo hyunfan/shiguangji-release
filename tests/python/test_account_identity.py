@@ -5,11 +5,10 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
 from shiguangji.platforms.account_identity import Catalog, observations, search_handles
 from shiguangji.collect.archive import Collector, Store, export_collection, make_zip
 from shiguangji.platforms.extractor import extract, blank_post
-from test_archive import FixtureClient, TS, PNG
+from test_archive import FixtureClient, TS
 
 
 def card(name, uid, pid='1346889436626259968', text='old post'):

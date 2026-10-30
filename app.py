@@ -24,16 +24,16 @@ from shiguangji.platforms.platform_registry import platform_for
 from shiguangji.storage.collection_lock import CollectionBusy, collection_lock
 from shiguangji.platforms.platform_accounts import account_input
 from shiguangji.collect.instagram_archive import InstagramCollector
-from shiguangji.storage.collection_delete import delete_collection
+from shiguangji.storage.collection_delete import delete_collection  # noqa: F401 - read by shiguangji.web via Handler.env
 from shiguangji.system.power_guard import prevent_idle_sleep
-from windows_integration import protocol_available
-from shiguangji.tasks.task_status import summary as task_summary
+from windows_integration import protocol_available  # noqa: F401 - read by shiguangji.web via Handler.env
+from shiguangji.tasks.task_status import summary as task_summary  # noqa: F401 - read by shiguangji.web via Handler.env
 
 from shiguangji.tasks.task_service import TaskService, SLEEP_MESSAGES
-from shiguangji.system.reliability import save_settings
+from shiguangji.system.reliability import save_settings  # noqa: F401 - read by shiguangji.web via Handler.env
 from shiguangji.storage.cloud_backup import CloudBackup
 from shiguangji.storage.storage_service import StorageService
-from shiguangji.storage.cloud_media import open_media
+from shiguangji.storage.cloud_media import open_media  # noqa: F401 - read by shiguangji.web via Handler.env
 from shiguangji.web.handler import LocalHandler, LocalServer
 from shiguangji.web.options import collect_options
 from shiguangji.web.security import tokens_equal

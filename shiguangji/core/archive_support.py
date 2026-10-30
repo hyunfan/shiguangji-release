@@ -2,7 +2,6 @@
 import hashlib
 import json
 import re
-from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from shiguangji import APP_ROOT

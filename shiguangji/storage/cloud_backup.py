@@ -255,7 +255,7 @@ def make_bundle(index, pulse):
         with zipfile.ZipFile(bundle) as check:
             for item in check.infolist():
                 with check.open(item) as reader:
-                    for block in iter(lambda:reader.read(CHUNK), b''):
+                    for _block in iter(lambda:reader.read(CHUNK), b''):
                         pulse()  # Reading to EOF checks each entry's CRC.
         sha = file_digest(bundle, pulse)
         atomic_write_text(receipt_path, sha)

@@ -1,6 +1,5 @@
 """Interrupted scans, cache upgrades and multi-process collection ownership."""
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,7 +10,7 @@ from unittest.mock import patch
 
 from shiguangji.collect import archive
 from shiguangji.collect.archive import Cancelled, Collector, Store
-from shiguangji.storage.collection_lock import CollectionBusy, collection_is_busy, collection_lock
+from shiguangji.storage.collection_lock import collection_is_busy, collection_lock
 from test_archive import FixtureClient, HTML, PID, TS, URL
 
 

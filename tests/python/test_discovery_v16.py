@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
 from shiguangji.collect.archive import Client, Collector, Store, INDEX_POLICY_VERSION
-from test_archive import FixtureClient, HTML, PID, TS, URL
+from test_archive import FixtureClient, TS, URL
 
 
 class DiscoveryTests(unittest.TestCase):

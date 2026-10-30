@@ -1,7 +1,6 @@
 """Identity discovery fixtures; no real network or user collections."""
 import json
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -272,7 +271,7 @@ class DiscoveryTests(unittest.TestCase):
         self.finish(runner)
         row = runner.identities.db.execute("SELECT value FROM settings WHERE key='alias_search:alice'").fetchone()
         state = json.loads(row[0])
-        for name, entry in state['entries'].items():
+        for _name, entry in state['entries'].items():
             if entry['status'] == 'unavailable':
                 entry['at'] = time.time() - 86401
         runner.identities.db.execute("UPDATE settings SET value=? WHERE key='alias_search:alice'", (json.dumps(state),))

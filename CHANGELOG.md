@@ -13,6 +13,7 @@
 - 长函数：`extractor.extract` 按解析来源拆为固定链接、HTML 容器、JSON、页面元数据等步骤；`reuse_local_aliases` 拆出源合集读取、快照解析、媒体复用与原始快照保存；解析结果与复用行为不变。
 - 公共函数：重复的 `read_json` / `write_json` 合并到 `shiguangji/core/atomic_io.py`，任务队列改用 `core` 的 `now`；合集文件仍为缩进格式，控制文件仍为紧凑格式。
 - 网络客户端：Wayback 与公开来源客户端相同的停止/预算检查合并为 `shiguangji/sources/cancellation.py` 的 `CancellableClient`。
+- 静态检查：新增 `ruff.toml`，只启用 F（pyflakes）与 B（bugbear）规则；清理未使用的导入与变量，对兼容转出、循环内同步调用的闭包和有意保留的异常链做了说明或按文件豁免。ruff 只是开发检查工具，不是运行依赖。
 
 ## 1.28.2 · 2026-10-18
 

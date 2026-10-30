@@ -8,7 +8,6 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 from http.client import HTTPException
 import re
 import shutil

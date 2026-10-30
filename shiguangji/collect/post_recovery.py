@@ -1,6 +1,6 @@
 """Bounded text/attachment fallback for exact, publicly accessible X posts."""
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from shiguangji.sources.public_sources import discover
 from shiguangji.sources.source_http import SourceClient
 from shiguangji.platforms.extractor import merge_post, blank_post

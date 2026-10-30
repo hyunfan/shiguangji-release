@@ -1,0 +1,17 @@
+# Static checks only (no formatting): pyflakes (F) and flake8-bugbear (B).
+# CI runs `ruff check .`; the application itself has no third-party dependencies.
+target-version = "py310"
+
+[lint]
+select = ["F", "B"]
+
+[lint.per-file-ignores]
+# These closures are called inside the same loop iteration that defines them,
+# so late binding of loop variables cannot occur.
+"shiguangji/collect/archive.py" = ["B023"]
+"tests/**" = ["B023"]
+# Re-raised errors keep their implicit exception context on purpose; adding
+# `from` would change the recorded tracebacks.
+"deploy_release.py" = ["B904"]
+"launcher.py" = ["B904"]
+"shiguangji/storage/compressed_files.py" = ["B904"]

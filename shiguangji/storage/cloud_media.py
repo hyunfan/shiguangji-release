@@ -15,7 +15,6 @@ import re
 import subprocess
 import sys
 import threading
-import time
 import uuid
 import zipfile
 

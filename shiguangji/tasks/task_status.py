@@ -1,6 +1,5 @@
 """One interpretation of task lifecycle, recovery coverage and terminal reasons."""
 from __future__ import annotations
-from datetime import datetime
 
 STATES = {'idle', 'running', 'pausing', 'finalizing', 'paused', 'finished', 'failed', 'interrupted', 'unknown'}
 LIMITS = {'time_limit', 'request_limit', 'source_limit', 'session_limit', 'batch_limit', 'storage_low'}
