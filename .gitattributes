@@ -1,2 +1,17 @@
-* text=auto
+# LF in the repository and the worktree on every platform, including when
+# core.autocrlf is set. Release packages hash these worktree bytes.
+* text=auto eol=lf
+# cmd.exe can mis-parse LF batch files that use labels and goto.
 *.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.pyd binary
+.coverage binary
